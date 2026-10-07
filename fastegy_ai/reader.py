@@ -10,7 +10,11 @@ GET /search?...
     blocked from this server; the relay swaps in SEARCH_ENGINES (engines that answer from here)
     and passes every other parameter and the JSON reply through unchanged.
 
-Version 2 — 2026-10-08
+POST /mcp
+    Minimal MCP server (streamable HTTP, JSON responses) exposing the product catalog to
+    LibreChat: lookup_product(code) and search_catalog(keywords). See products.py.
+
+Version 3 — 2026-10-08
 """
 import ipaddress
 import json
@@ -21,13 +25,22 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 
+import io
+
 import trafilatura
+from pypdf import PdfReader
+
+import products
 
 KEY = os.environ.get("READER_KEY", "")
 MAX_CHARS = int(os.environ.get("READER_MAX_CHARS", "20000"))
 SEARXNG = os.environ.get("SEARXNG_UPSTREAM", "http://searxng:8080/search")
 ENGINES = os.environ.get("SEARCH_ENGINES", "yahoo,startpage,yandex")
+CATALOG_PATH = os.environ.get("CATALOG_PATH", "/app/catalog.json")
+MCP_KEY = os.environ.get("MCP_KEY", "")
 MAX_BYTES = 3_000_000
+MAX_PDF_BYTES = 15_000_000
+MAX_PDF_PAGES = 12          # datasheets are 3-8 pages; brochures are cut to the first pages
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
@@ -57,19 +70,94 @@ def fetch(url, timeout):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "ar,en;q=0.8"})
     with OPENER.open(req, timeout=timeout) as r:
         ctype = r.headers.get("Content-Type", "")
+        if "pdf" in ctype or r.geturl().lower().split("?")[0].endswith(".pdf"):
+            return r.read(MAX_PDF_BYTES), r.status, r.geturl()       # bytes: handled by to_markdown
         if "html" not in ctype and "text" not in ctype:
             raise ValueError("unsupported content type: " + ctype)
         raw = r.read(MAX_BYTES)
         return raw.decode(r.headers.get_content_charset() or "utf-8", errors="replace"), r.status, r.geturl()
 
 
+def pdf_to_text(data):
+    """Text of the first pages of a PDF (official datasheets are PDFs)."""
+    reader = PdfReader(io.BytesIO(data))
+    pages = []
+    for page in reader.pages[:MAX_PDF_PAGES]:
+        text = page.extract_text() or ""
+        pages.append("\n".join(line.rstrip() for line in text.splitlines() if line.strip()))
+    title = (reader.metadata.title if reader.metadata else None) or None
+    return "\n\n".join(pages)[:MAX_CHARS], title
+
+
 def to_markdown(html, url):
+    if isinstance(html, bytes):
+        return pdf_to_text(html)
     text = trafilatura.extract(html, url=url, output_format="markdown", include_tables=True,
                                include_links=False, favor_recall=True)
     if not text:
         text = trafilatura.extract(html, url=url, output_format="txt", favor_recall=True)
     meta = trafilatura.extract_metadata(html, default_url=url)
     return (text or "")[:MAX_CHARS], (meta.title if meta else None)
+
+
+_catalog = {"mtime": None, "obj": None}
+
+
+def catalog():
+    """Load the catalog JSON, reloading when the file changes (no restart needed)."""
+    mtime = os.path.getmtime(CATALOG_PATH)
+    if _catalog["mtime"] != mtime:
+        _catalog["obj"], _catalog["mtime"] = products.Catalog(CATALOG_PATH), mtime
+    return _catalog["obj"]
+
+
+MCP_TOOLS = [
+    {"name": "lookup_product",
+     "description": ("Look up a Hikvision / EZVIZ model code in FastEgy's product catalog. Call this FIRST "
+                     "whenever the user mentions or asks about a model code, before searching the web. "
+                     "Returns the exact catalog entry with its key specs, or the closest codes when there "
+                     "is no exact match. Never state specs for a code this tool did not match exactly."),
+     "inputSchema": {"type": "object", "properties": {"code": {"type": "string",
+                     "description": "Model code as the user wrote it, e.g. DS-2CD2043G2-LIZ2UY"}},
+                     "required": ["code"]}},
+    {"name": "search_catalog",
+     "description": ("Search FastEgy's product catalog by keywords (technology, resolution, series, "
+                     "channels...), e.g. 'ColorVu 4 MP' or '16-ch NVR PoE'. Use it to recommend or "
+                     "compare products we carry."),
+     "inputSchema": {"type": "object", "properties": {"keywords": {"type": "string"}},
+                     "required": ["keywords"]}},
+]
+
+
+def mcp_dispatch(msg):
+    """Handle one JSON-RPC message; returns the response dict, or None for notifications."""
+    mid, method, params = msg.get("id"), msg.get("method"), msg.get("params") or {}
+    if mid is None:                                   # notification (e.g. notifications/initialized)
+        return None
+    try:
+        if method == "initialize":
+            result = {"protocolVersion": params.get("protocolVersion", "2025-03-26"),
+                      "capabilities": {"tools": {"listChanged": False}},
+                      "serverInfo": {"name": "fastegy-products", "version": "3"},
+                      "instructions": "FastEgy product catalog: use lookup_product for any model code."}
+        elif method == "ping":
+            result = {}
+        elif method == "tools/list":
+            result = {"tools": MCP_TOOLS}
+        elif method == "tools/call":
+            name, args = params.get("name"), params.get("arguments") or {}
+            if name == "lookup_product":
+                text = catalog().lookup(str(args.get("code", "")))
+            elif name == "search_catalog":
+                text = catalog().search(str(args.get("keywords", "")))
+            else:
+                return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "unknown tool"}}
+            result = {"content": [{"type": "text", "text": text}], "isError": False}
+        else:
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "method not found"}}
+    except Exception as e:  # tool failures go back to the model as an error result
+        result = {"content": [{"type": "text", "text": "catalog error: " + str(e)[:200]}], "isError": True}
+    return {"jsonrpc": "2.0", "id": mid, "result": result}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -87,11 +175,18 @@ class Handler(BaseHTTPRequestHandler):
         p = urlparse(self.path)
         if p.path == "/health":
             return self._send(200, {"ok": True})
+        if p.path.rstrip("/") == "/mcp":              # no server-initiated stream
+            self.send_response(405)
+            self.send_header("Allow", "POST")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if p.path.rstrip("/") != "/search":
             return self._send(404, {"ok": False})
         params = parse_qs(p.query, keep_blank_values=True)
         if ENGINES:
             params["engines"] = [ENGINES]
+            params.pop("categories", None)   # otherwise SearXNG also queries every engine of the category
         req = urllib.request.Request(SEARXNG + "?" + urlencode(params, doseq=True),
                                      headers={"Accept": "application/json", "X-Real-IP": "127.0.0.1"})
         try:
@@ -102,7 +197,12 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # upstream down or timed out
             self._send(502, {"error": "search upstream failed: " + str(e)[:200]})
 
+    def do_DELETE(self):
+        self._raw(200, b"", "text/plain")             # session end: nothing to clean up
+
     def do_POST(self):
+        if self.path.rstrip("/") == "/mcp":
+            return self.handle_mcp()
         if self.path.rstrip("/") not in ("/v1/scrape", "/v2/scrape"):
             return self._send(404, {"success": False, "error": "not found"})
         if KEY and self.headers.get("Authorization", "") != "Bearer " + KEY:
@@ -120,6 +220,19 @@ class Handler(BaseHTTPRequestHandler):
                 "title": title, "sourceURL": url, "url": final, "statusCode": status}}})
         except Exception as e:  # report every failure to the caller as a failed scrape
             self._send(200, {"success": False, "error": str(e)[:300]})
+
+    def handle_mcp(self):
+        if MCP_KEY and self.headers.get("Authorization", "") != "Bearer " + MCP_KEY:
+            return self._send(401, {"error": "unauthorized"})
+        try:
+            msg = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"null")
+        except ValueError:
+            return self._send(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
+        batch = msg if isinstance(msg, list) else [msg]
+        out = [r for r in (mcp_dispatch(m) for m in batch if isinstance(m, dict)) if r is not None]
+        if not out:
+            return self._raw(202, b"", "text/plain")   # only notifications
+        self._send(200, out if isinstance(msg, list) else out[0])
 
     def log_message(self, fmt, *args):
         pass
