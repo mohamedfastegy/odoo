@@ -10,7 +10,7 @@
 #           (API keys, passwords, tokens, URL credentials are masked).
 # Usage   : sudo bash fastegy_ai_audit.sh            -> ~/fastegy_ai_audit_<date>.txt
 #           sudo bash fastegy_ai_audit.sh /path/out.txt
-# Version : 1.0 — 2026-10-07
+# Version : 1.1 — 2026-10-07 (mask password hashes; vector DB must belong to LibreChat)
 # =============================================================================
 
 set -u
@@ -37,6 +37,8 @@ redact() {
     s/\b(gsk_|xai-|pplx-|tvly-|hf_|jina_|fc-|ghp_|gho_|github_pat_)[A-Za-z0-9_-]{16,}/$1***REDACTED***/g;
     s/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]+/eyJ***REDACTED***/g;
     s/(Bearer\s+)[A-Za-z0-9._~+\/=-]{8,}/$1***REDACTED***/ig;
+    # password hashes (e.g. Caddy basic_auth bcrypt)
+    s/\$2[abxy]?\$\d{2}\$[.\/A-Za-z0-9]{20,}/\$2***REDACTED-HASH***/g;
   '
 }
 
@@ -71,22 +73,37 @@ find_ctr() {
 }
 ctr_env() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1" 2>/dev/null; }
 ctr_env_get() { ctr_env "$1" | sed -n "s/^$2=//p" | head -n1; }
+proj_of() { docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$1" 2>/dev/null; }
+svc_of()  { docker inspect -f '{{ index .Config.Labels "com.docker.compose.service" }}' "$1" 2>/dev/null; }
 
 API=$(find_ctr 'librechat' 'rag|admin|meili|mongo|pgvector')
 [ -z "$API" ] && API=$(docker ps --format '{{.Names}}' | grep -ixE 'librechat|librechat-api' | head -n1)
 RAG=$(find_ctr 'rag-api|rag_api')
 MONGO=$(find_ctr '(^|/)mongo(:|@|$)')
 [ -z "$MONGO" ] && MONGO=$(docker ps --format '{{.Names}}' | grep -iE 'mongo' | head -n1)
-VDB=$(find_ctr 'pgvector')
-[ -z "$VDB" ] && VDB=$(docker ps --format '{{.Names}}' | grep -iE 'vectordb' | head -n1)
 MEILI=$(find_ctr 'meilisearch')
-WD=""
+WD=""; PROJ=""
 [ -n "$API" ] && WD=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$API" 2>/dev/null)
+[ -n "$API" ] && PROJ=$(proj_of "$API")
+RAG_DB_HOST=""
+[ -n "$RAG" ] && RAG_DB_HOST=$(ctr_env_get "$RAG" DB_HOST)
+
+# Vector DB: only a pgvector container that belongs to LibreChat (same compose project, or rag_api's DB_HOST).
+# Other apps on the box (e.g. Chatwoot) run their own pgvector and must not be mistaken for it.
+is_librechat_db() {
+  [ -n "$PROJ" ] && [ "$(proj_of "$1")" = "$PROJ" ] && return 0
+  [ -n "$RAG_DB_HOST" ] && { [ "$1" = "$RAG_DB_HOST" ] || [ "$(svc_of "$1")" = "$RAG_DB_HOST" ]; }
+}
+VDB=""; OTHER_PG=""
+for c in $(docker ps --format '{{.Names}}\t{{.Image}}' | awk -F'\t' 'tolower($2) ~ /pgvector/ || tolower($1) ~ /vectordb/ {print $1}'); do
+  if [ -z "$VDB" ] && is_librechat_db "$c"; then VDB=$c; else OTHER_PG="$OTHER_PG $c"; fi
+done
 
 main() {
   echo "FastEgy AI audit — $(date -Is) — host $(hostname)"
   echo "Detected: api=${API:-NONE} rag_api=${RAG:-NONE} mongo=${MONGO:-NONE} vectordb=${VDB:-NONE} meili=${MEILI:-NONE}"
-  echo "Compose working dir: ${WD:-unknown}"
+  echo "Compose working dir: ${WD:-unknown} (project: ${PROJ:-unknown})"
+  [ -n "$OTHER_PG" ] && echo "Other pgvector containers (other apps, not inspected):$OTHER_PG"
 
   # ---------------------------------------------------------------- host
   section "1. HOST RESOURCES"
@@ -187,7 +204,8 @@ SELECT regexp_replace(cmetadata->>'source', '^.*/', '') AS document, count(*) AS
 FROM langchain_pg_embedding GROUP BY 1 ORDER BY 2 DESC LIMIT 30;
 SQL
   else
-    echo "vectordb container NOT running."
+    echo "No vector DB attached to LibreChat."
+    [ -n "$OTHER_PG" ] && echo "Other pgvector containers belong to other apps and were not inspected:$OTHER_PG"
   fi
 
   # ---------------------------------------------------------------- MongoDB
