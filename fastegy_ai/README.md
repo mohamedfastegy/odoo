@@ -78,3 +78,46 @@ sudo bash fastegy_ai_audit.sh
 ابعته في المحادثة، أو اعرض محتواه بأمر:
 
 `cat ~/fastegy_ai_audit_*.txt`
+
+---
+
+## سجل التعديلات على السيرفر
+
+### 7 أكتوبر 2026: رجوع المساعد للشغل بعد ما النماذج القديمة اتوقفت
+
+الشركة اللي كانت شغّالة النماذج وقّفت كل النماذج القديمة، فمكانش فاضل شغّال غير الخيار الذكي.
+
+اللي اتعمل:
+
+- الخيار السريع، وعناوين المحادثات، والذاكرة اتنقلوا على النموذج ده من الخطة المجانية:
+
+  `groq/openai/gpt-oss-20b`
+
+- الخيار الذكي اتنقل على:
+
+  `groq/openai/gpt-oss-120b`
+
+- لو النموذج المجاني فشل أو حده اليومي خلص، السؤال بيتحوّل تلقائيًا لأرخص نموذج عند جوجل:
+
+  `gemini/gemini-flash-lite-latest`
+
+- خيار تحليل الصور اتشال، ونموذج توليد الصور اتشال من القايمة، وجملة البحث في النت اتشالت من اسم الخيار الذكي.
+
+السكريبتات:
+
+`fix_1_litellm.sh`
+
+`fix_2_librechat.sh`
+
+النسخ الاحتياطية على السيرفر:
+
+`/root/litellm/config.yaml.bak.20261007_213611`
+
+`/root/librechat/librechat.yaml.bak.20261007_213653`
+
+الرجوع للإعدادات القديمة:
+
+```bash
+cat /root/litellm/config.yaml.bak.20261007_213611 > /root/litellm/config.yaml && docker restart litellm
+cat /root/librechat/librechat.yaml.bak.20261007_213653 > /root/librechat/librechat.yaml && docker restart librechat
+```
