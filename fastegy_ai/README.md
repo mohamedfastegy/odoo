@@ -121,3 +121,23 @@ sudo bash fastegy_ai_audit.sh
 cat /root/litellm/config.yaml.bak.20261007_213611 > /root/litellm/config.yaml && docker restart litellm
 cat /root/librechat/librechat.yaml.bak.20261007_213653 > /root/librechat/librechat.yaml && docker restart librechat
 ```
+
+### 7 أكتوبر 2026: منع المساعد من تأليف أرقام لحظية
+
+بعد تغيير النماذج، الخيارين ردّوا على سؤال سعر الدولار برقم قديم. والخيار الذكي كمان ادّعى إن الرقم من مصادر موثوقة بتاريخ النهارده.
+
+اتضافت تعليمات ثابتة للخيارين بالسكريبت:
+
+`fix_3_prompts.sh`
+
+الاختبار قبل التطبيق: النموذجين رفضوا يدّوا رقم، ووجّهوا السائل للبنك المركزي.
+
+النسخة الاحتياطية:
+
+`/root/librechat/librechat.yaml.bak.20261007_214425`
+
+الرجوع:
+
+```bash
+cat /root/librechat/librechat.yaml.bak.20261007_214425 > /root/librechat/librechat.yaml && docker restart librechat
+```
