@@ -194,3 +194,33 @@ cat /root/librechat/librechat.yaml.bak.20261007_215936 > /root/librechat/librech
 cd /root/librechat && docker compose up -d --no-deps librechat
 docker rm -f searxng fastegy-reader
 ```
+
+### 8 أكتوبر 2026: قاعدة معرفة المنتجات (جاهزة، ولسه ما اتركّبتش)
+
+المصدر: كتالوج هيك فيجن الرسمي للمنتجات الأكتر مبيعًا، نسخة النص التاني من 2025.
+
+اتطلّع منه 351 منتج و415 كود، وكل سطر مواصفات اتراجع على صفحته في الكتالوج.
+
+| الملف | المحتوى |
+|---|---|
+| `kb/hikvision_hot_selling_2025H2.json` | قاعدة البيانات |
+| `kb/hikvision_hot_selling_2025H2.csv` | نسخة تتفتح في إكسيل للمراجعة |
+| `kb/extract_brochure.py` | أداة الاستخراج، لنسخ الكتالوج الجاية |
+| `products.py` | البحث بالكود: بيطابق الكود بالظبط، أو بيعرض أقرب الأكواد ليه، ومن غير تخمين |
+| `reader.py` | النسخة التالتة من الخدمة: أداتين للمساعد، وقراءة ملفات المواصفات اللي بصيغة PDF |
+
+التركيب:
+
+```bash
+cd /root && curl -fsSL https://raw.githubusercontent.com/mohamedfastegy/odoo/claude/magical-allen-wx2wnm/fastegy_ai/kb_1_catalog.sh -o kb_1_catalog.sh && bash kb_1_catalog.sh
+```
+
+ملاحظة: بعد التركيب، ما تشغّلش السكريبتين دول تاني، لأنهم بيرجّعوا الخدمة للنسخة التانية:
+
+`web_1_services.sh`
+
+`web_5_search_relay.sh`
+
+ولتحديث الكتالوج بعد كده، استبدل الملف ده، ومش محتاج إعادة تشغيل:
+
+`/root/fastegy-reader/catalog.json`
