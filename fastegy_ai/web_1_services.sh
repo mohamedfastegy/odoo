@@ -11,7 +11,7 @@
 # is reachable from the internet. LibreChat is NOT touched by this script.
 # Undo   : docker rm -f searxng fastegy-reader
 # Run    : sudo bash web_1_services.sh
-# Version: 1.0 — 2026-10-08
+# Version: 1.1 — 2026-10-08 (reader v2 with search relay; yahoo/startpage/yandex on)
 # =============================================================================
 set -euo pipefail
 
@@ -60,6 +60,16 @@ engines:
     disabled: false
   - name: duckduckgo
     disabled: false
+  # these answer from this server (see web_4/web_5); the reader relays searches to them
+  - name: yahoo
+    disabled: false
+    inactive: false
+  - name: startpage
+    disabled: false
+    inactive: false
+  - name: yandex
+    disabled: false
+    inactive: false
 EOF
   chmod 644 /root/searxng/settings.yml
 fi
@@ -71,24 +81,35 @@ echo "searxng started"
 # ------------------------------------------------------------- page reader
 mkdir -p /root/fastegy-reader
 cat >/root/fastegy-reader/reader.py <<'PY'
-"""FastEgy page reader: minimal Firecrawl-compatible /v2/scrape for LibreChat web search.
+"""FastEgy reader: page reader + search relay for LibreChat web search.
 
-POST /v2/scrape {"url": ..., "timeout": ms} -> {"success": true, "data": {"markdown": ..., "metadata": {...}}}
-Only public http(s) URLs are fetched (private, loopback and link-local targets are refused,
-including on redirects), so the model cannot be steered into internal services.
+POST /v2/scrape {"url": ..., "timeout": ms}
+    Minimal Firecrawl-compatible scraper -> {"success": true, "data": {"markdown": ..., "metadata": {...}}}
+    Only public http(s) URLs are fetched (private, loopback and link-local targets are refused,
+    including on redirects), so the model cannot be steered into internal services.
+
+GET /search?...
+    Relay to SearXNG. LibreChat 0.8.6 always asks for engines=google,bing,duckduckgo, which are
+    blocked from this server; the relay swaps in SEARCH_ENGINES (engines that answer from here)
+    and passes every other parameter and the JSON reply through unchanged.
+
+Version 2 — 2026-10-08
 """
 import ipaddress
 import json
 import os
 import socket
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import trafilatura
 
 KEY = os.environ.get("READER_KEY", "")
 MAX_CHARS = int(os.environ.get("READER_MAX_CHARS", "20000"))
+SEARXNG = os.environ.get("SEARXNG_UPSTREAM", "http://searxng:8080/search")
+ENGINES = os.environ.get("SEARCH_ENGINES", "yahoo,startpage,yandex")
 MAX_BYTES = 3_000_000
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
@@ -110,6 +131,8 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(SafeRedirect)
+# the SearXNG upstream is a fixed internal address: no proxy, no redirects to follow
+UPSTREAM = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def fetch(url, timeout):
@@ -134,15 +157,33 @@ def to_markdown(html, url):
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, obj):
-        body = json.dumps(obj, ensure_ascii=False).encode()
+        self._raw(code, json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+
+    def _raw(self, code, body, ctype):
         self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self):
-        self._send(200 if self.path == "/health" else 404, {"ok": self.path == "/health"})
+        p = urlparse(self.path)
+        if p.path == "/health":
+            return self._send(200, {"ok": True})
+        if p.path.rstrip("/") != "/search":
+            return self._send(404, {"ok": False})
+        params = parse_qs(p.query, keep_blank_values=True)
+        if ENGINES:
+            params["engines"] = [ENGINES]
+        req = urllib.request.Request(SEARXNG + "?" + urlencode(params, doseq=True),
+                                     headers={"Accept": "application/json", "X-Real-IP": "127.0.0.1"})
+        try:
+            with UPSTREAM.open(req, timeout=20) as r:
+                self._raw(r.status, r.read(), r.headers.get("Content-Type", "application/json"))
+        except urllib.error.HTTPError as e:
+            self._raw(e.code, e.read(), e.headers.get("Content-Type", "application/json"))
+        except Exception as e:  # upstream down or timed out
+            self._send(502, {"error": "search upstream failed: " + str(e)[:200]})
 
     def do_POST(self):
         if self.path.rstrip("/") not in ("/v1/scrape", "/v2/scrape"):
@@ -179,14 +220,14 @@ EXPOSE 3002
 CMD ["python", "-u", "/app/reader.py"]
 EOF
 echo "building fastegy-reader (about a minute)..."
-docker build -q -t fastegy-reader:1 /root/fastegy-reader >/dev/null
+docker build -q -t fastegy-reader:2 /root/fastegy-reader >/dev/null
 
 KEYFILE=/root/fastegy-reader/.key
 [ -s "$KEYFILE" ] || openssl rand -hex 24 >"$KEYFILE"
 chmod 600 "$KEYFILE"
 replace_ok fastegy-reader
 docker run -d --name fastegy-reader --restart unless-stopped --network "$NET" --label "$LABEL" \
-  --memory 384m -e READER_KEY="$(cat "$KEYFILE")" fastegy-reader:1 >/dev/null
+  --memory 384m -e READER_KEY="$(cat "$KEYFILE")" -e SEARCH_ENGINES=yahoo,startpage,yandex fastegy-reader:2 >/dev/null
 echo "fastegy-reader started"
 
 # ---------------------------------------------- tests from LibreChat's side
