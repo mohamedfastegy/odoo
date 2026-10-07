@@ -141,3 +141,56 @@ cat /root/librechat/librechat.yaml.bak.20261007_213653 > /root/librechat/librech
 ```bash
 cat /root/librechat/librechat.yaml.bak.20261007_214425 > /root/librechat/librechat.yaml && docker restart librechat
 ```
+
+### 8 أكتوبر 2026: البحث في النت
+
+المساعد بقى يبحث في النت من خدمات شغالة على السيرفر نفسه، ومن غير أي اشتراك.
+
+| الخدمة | دورها |
+|---|---|
+| `searxng` | محرك البحث |
+| `fastegy-reader` | يقرا الصفحات، ويحوّل طلبات البحث للمحركات الشغالة |
+
+- الخدمتين على شبكة المساعد الداخلية بس، ومفيش ليهم أي منفذ مفتوح للإنترنت.
+- المساعد عنده بيطلب جوجل وبينج ودك دك جو دايمًا. ومن السيرفر ده جوجل رافض، ودك دك جو بيطلب تأكيد، وبينج ضعيف. عشان كده الخدمة بتحوّل البحث لياهو وستارت بيدج وياندكس.
+- الخيار الذكي البحث فيه شغال تلقائيًا، والسريع فيه زرار للبحث.
+- تاريخ النهارده بيتحط في التعليمات تلقائيًا، والنموذج بيبحث بالإنجليزي ويرد بالعربي.
+
+السكريبتات بالترتيب:
+
+`web_1_services.sh`
+
+`web_2_enable.sh`
+
+`web_3_quality.sh`
+
+`web_4_engines.sh`
+
+`web_5_search_relay.sh`
+
+النسخ الاحتياطية المهمة:
+
+`/root/librechat/docker-compose.yml.bak.20261007_215936`
+
+ده قبل البحث خالص.
+
+`/root/librechat/librechat.yaml.bak.20261007_215936`
+
+ده قبل البحث خالص.
+
+`/root/librechat/docker-compose.yml.bak.20261007_222520`
+
+ده قبل تحويل البحث للخدمة.
+
+`/root/searxng/settings.yml.bak.20261007_222520`
+
+`/root/fastegy-reader/reader.py.bak.20261007_222520`
+
+لإلغاء البحث في النت كله والرجوع لحالة ما قبله:
+
+```bash
+cat /root/librechat/docker-compose.yml.bak.20261007_215936 > /root/librechat/docker-compose.yml
+cat /root/librechat/librechat.yaml.bak.20261007_215936 > /root/librechat/librechat.yaml
+cd /root/librechat && docker compose up -d --no-deps librechat
+docker rm -f searxng fastegy-reader
+```
