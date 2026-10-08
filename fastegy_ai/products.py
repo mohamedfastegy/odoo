@@ -158,12 +158,13 @@ class Catalog:
         body = "\n\n".join((h + "\n" + t).strip() for _, h, t in parts)
         if "exact" in kinds:
             return f"EXACT MATCH for {query}:\n\n{body}"
+        web = ("If you have web search, look up the official datasheet of this exact code and give its specs "
+               "with the link; otherwise ask which code the user means. Never present another code's specs as this one's.")
         if any(k in ("variant", "near") for k in kinds):
-            return (f"NO EXACT MATCH for {query}.\n\n{body}\n\n"
-                    "Ask the user which one they mean, or look up one of these codes. "
-                    "Do not give specs for a code that did not match exactly.")
+            return (f"NO EXACT MATCH for {query}: this exact code is not in our sources.\n\n{body}\n\n"
+                    "Tell the user and show the closest codes above. " + web)
         where = "the " + self.source + (" or FastEgy's product list" if self.carried is not None else "")
-        return f"NOT FOUND: {query} is not in {where}. Do not guess its specs; say it is not in the catalog."
+        return f"NOT FOUND: {query} is not in {where}. Do not guess its specs. " + web
 
     def _brochure(self, q):
         """(kind, text): kind is exact / variant / near / none."""
