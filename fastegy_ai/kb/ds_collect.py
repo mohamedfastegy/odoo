@@ -23,6 +23,9 @@ Usage:
   --ignore-blocked  engines known to be blocked already (comma list); without it, the engines
                     blocked at the job's first search
 
+Version 1.3 — 2026-10-08: a datasheet counts only with an English "Specification" section (a French
+              or spec-less file is skipped for the next candidate), and localized links
+              (/fr-fr/, /de-de/ ...) are tried after the others.
 Version 1.2 — 2026-10-08: stops on a new engine block (ignores engines blocked before it started);
               optional daytime pace; an empty search is an error, retried later.
 """
@@ -108,8 +111,11 @@ def pdf_text(url):
     return reader.pdf_to_text(data)[0]
 
 
+LOCALE = re.compile(r"/(?!en)[a-z]{2}-[a-z]{2}/")             # /fr-fr/, /de-de/: maybe not in English
+
+
 def candidates(code, results):
-    """Official PDF links, the ones naming the code in the file name first, newest first."""
+    """Official PDF links: naming the code in the file name first, localized links last, newest first."""
     norm = re.sub(r"[^A-Z0-9]", "", code.upper())
     seen, out = set(), []
     for r in results:
@@ -119,10 +125,10 @@ def candidates(code, results):
         seen.add(url)
         named = norm in re.sub(r"[^A-Z0-9]", "", url.upper())
         date = max(re.findall(r"(20\d{6})", url) or ["0"])
-        out.append((named, date, url))
-    named = sorted([c for c in out if c[0]], key=lambda t: t[1], reverse=True)
-    other = sorted([c for c in out if not c[0]], key=lambda t: t[1], reverse=True)
-    return [u for _, _, u in named + other]
+        local = bool(LOCALE.search(url))
+        out.append((named and not local, named, not local, date, url))
+    out.sort(key=lambda t: t[:4], reverse=True)
+    return [u for *_, u in out]
 
 
 def collect(code, results, max_pdfs=3):
@@ -134,8 +140,10 @@ def collect(code, results, max_pdfs=3):
         except Exception as e:                    # a broken or blocked PDF: try the next one
             found = None
             tried[-1] += f" ({str(e)[:60]})"
-        if found:
+        if found and found["spec"].strip():
             return {"code": code, "status": "found", "url": url, **found}
+        if found:                                 # names the code but has no English specification
+            tried[-1] += " (no Specification section)"
     return {"code": code, "status": "not_found", "results": len(results), "tried": tried}
 
 

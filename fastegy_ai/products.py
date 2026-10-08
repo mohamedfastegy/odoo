@@ -117,6 +117,41 @@ def looks_like_code(text):
     return bool(re.search(r"[A-Z0-9]-[A-Z0-9]", q) and re.search(r"\d", q) and len(q) >= 6)
 
 
+# A datasheet line for some versions only: "-U: ...", "-LIU、-LIUF: NA", "-LIUF、LIUF/S(L)(RB)：..."
+VERSION_LINE = re.compile(r"^(\s*)(-[A-Z0-9][A-Z0-9/()]*(?:\s*[、,，]\s*-?[A-Z0-9][A-Z0-9/()]*)*)\s*[:：]")
+
+
+def expand(token):
+    """'LIUF/S(L)(RB)' -> {'LIUF/S', 'LIUF/SL', 'LIUF/SRB', 'LIUF/SLRB'}: bracketed parts are optional."""
+    out = {""}
+    for i, part in enumerate(re.split(r"\(([^()]*)\)", token)):
+        out = {o + part for o in out} if i % 2 == 0 else {o + x for o in out for x in ("", part)}
+    return out
+
+
+def mark_versions(spec, code):
+    """Mark version lines written as full suffixes (-LIUF、LIUF/S(L)(RB)：) as for this code or not.
+    Lines with single-letter flags (-U:, -F:) are left as they are; the note covers them."""
+    want = norm(code).rsplit("-", 1)[-1]                 # DS-2CD1067G3-LIU/SL -> LIU/SL
+    out = []
+    for line in spec.split("\n"):
+        m = VERSION_LINE.match(line)
+        if m:
+            tokens = [t.strip().lstrip("-").upper() for t in re.split(r"[、,，]", m.group(2)) if t.strip()]
+            if any(len(t) >= 2 and t[0] == want[0] for t in tokens):      # full suffixes, not letter flags
+                ok = any(want in expand(t) for t in tokens)
+                line = (f"[{code}] " if ok else f"[other versions, NOT {code}] ") + line.strip()
+        out.append(line)
+    return "\n".join(out)
+
+
+def several_versions(ds):
+    """Does this datasheet cover several versions (so its unmarked key features may not all apply)?"""
+    text = "\n".join([*ds.get("features", []), ds.get("spec", "")])
+    return ("(" in ds.get("title", "").split(" — ")[0] or "(Optional)" in text
+            or any(VERSION_LINE.match(line) for line in text.split("\n")))
+
+
 VARIANT_TAIL = re.compile(r"(?:/[A-Z0-9]+|\([^)]*\))$")
 
 
@@ -280,16 +315,17 @@ class Catalog:
             if ds:
                 lines.append(f"Official Hikvision datasheet for {m['code']} (read automatically from {ds['url']}):")
                 lines.append("  " + ds.get("title", m["code"]))
-                if ds.get("features"):
+                if several_versions(ds):
+                    # the key features are marketing bullets for the whole series and say nothing about versions
+                    lines.append(f"  Note: this datasheet covers several versions, so its key features are left out. "
+                                 f"Lines marked [other versions, NOT {m['code']}] do not apply to it. Lines starting "
+                                 f"with '-U:', '-F:', '-SL:' and the like, and features marked (Optional), apply only "
+                                 f"to versions with that suffix; {m['code']} has only what its own code shows.")
+                elif ds.get("features"):
                     lines.append("  Key features: " + "; ".join(ds["features"][:8]))
-                text = "\n".join([*ds.get("features", []), ds.get("spec", "")])
-                title = ds.get("title", "").split(" — ")[0]          # e.g. "DS-2CD1027G2-L(UF)"
-                if ("(" in title or re.search(r"^\s*-[A-Z0-9/]{1,6}\s*:", text, re.M)
-                        or "(Optional)" in text):
-                    lines.append(f"  Note: this datasheet covers several versions. Lines starting with '-U:', '-F:', "
-                                 f"'-SL:' and the like, and features marked (Optional), apply only to versions with "
-                                 f"that suffix; {m['code']} has only what its own code shows.")
-                lines.append("  Specification:\n" + "\n".join("    " + x for x in ds["spec"][:3000].split("\n")))
+                spec = mark_versions(ds.get("spec", ""), m["code"])[:3200]
+                lines.append("  Specification:\n" + "\n".join("    " + x for x in spec.split("\n")) if spec.strip()
+                             else "  Specification: not read from this file.")
             lines.append("The list says nothing about stock or price: do not claim either.")
             return "exact", "\n".join(lines)
         related = []
@@ -339,7 +375,9 @@ class Catalog:
         if self.carried is not None:
             def ds_line(m):
                 ds = self.datasheets.get(norm(m["code"]))
-                return (ds["title"] + "; " + "; ".join(ds.get("features", [])[:4])) if ds else ""
+                if not ds:
+                    return ""
+                return "; ".join([ds["title"], *([] if several_versions(ds) else ds.get("features", [])[:4])])
             top, rows = best(self.carried, lambda m: " ".join(
                 [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or "", ds_line(m)]))
             if rows:
