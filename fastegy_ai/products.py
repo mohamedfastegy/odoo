@@ -88,6 +88,7 @@ SYNONYMS = {
     "colorvu": ("colorvu",),
 }
 SYN = {w: k for k, words in SYNONYMS.items() for w in words}
+STOPWORDS = {"ds", "ids", "hikvision", "هيكفيجن", "هيك", "فيجن", "رشحلي", "عايز", "عاوز", "عندنا", "ايه"}
 
 
 def search_tokens(text):
@@ -289,7 +290,7 @@ class Catalog:
 
     def search(self, text, limit=8):
         """Keyword search (English or Arabic) over FastEgy's product list and the brochure."""
-        terms = list(dict.fromkeys(search_tokens(text)))
+        terms = [t for t in dict.fromkeys(search_tokens(text)) if t not in STOPWORDS]
         if not terms:
             return "Give some keywords, e.g. 'ColorVu 4 MP turret', '16-ch NVR PoE' or 'كاميرا خارجية 4 ميجا'."
 
@@ -324,8 +325,10 @@ class Catalog:
         top, rows = best(self.products, lambda p: " ".join(
             [*p["codes"], *(p.get("labels") or []), p.get("category") or "", p.get("series") or "",
              *p["specs"]]))
-        if out:
-            rows = rows[:4]                   # FastEgy's own models first; a few brochure ones for reference
+        if out and rows:                      # brochure lines next to FastEgy's models got their specs mixed up
+            out.append(f"Hikvision brochure: {len(rows)} entries also match; not listed here because FastEgy's own "
+                       "models matched. Use lookup_product on a code for its official brochure specs.")
+            rows = []
         if rows:
             out.append(f"Hikvision brochure: {len(rows)} entries matching '{text}' ({top}/{len(terms)} keywords):")
             for sc, p in rows:
