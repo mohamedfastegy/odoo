@@ -70,6 +70,21 @@ def literal(code):
     return re.sub(r"\([^)]*\)", "", code)
 
 
+VARIANT_TAIL = re.compile(r"(?:/[A-Z0-9]+|\([^)]*\))$")
+
+
+def variant_bases(code):
+    """(base, suffix) for the code with its trailing variant parts removed one at a time:
+    DS-2CD2043G2-LIZ2UY/SL(RB) -> (…/SL, (RB)), (DS-2CD2043G2-LIZ2UY, /SL(RB))."""
+    base, tail = code, ""
+    while True:
+        m = VARIANT_TAIL.search(base)
+        if not m or m.start() == 0:
+            return
+        base, tail = base[:m.start()], m.group(0) + tail
+        yield base, tail
+
+
 class Catalog:
     def __init__(self, path):
         data = json.load(open(path, encoding="utf-8"))
@@ -121,6 +136,21 @@ class Catalog:
             body = "\n\n".join(self.describe(p, matched=n) for n, p in hits)
             return (f"EXACT MATCH for {query}:\n\n{body}\n\n{notation}\n"
                     "These are key specs only; for the full datasheet values, say so and do not invent them.")
+        # the catalog may list only a suffixed variant of the code (…/SL, …/8P): say so explicitly
+        variants, seen = [], set()
+        for n, _, p in self.index:
+            for base, tail in variant_bases(n):
+                if id(p) not in seen and code_pattern(base, p["specs"]).match(q):
+                    variants.append((n, tail))
+                    seen.add(id(p))
+                    break
+        if variants:
+            return (f"NO EXACT MATCH for {query}. The catalog lists only a variant of this code "
+                    "with an extra suffix:\n"
+                    + "\n".join(f"  - {n}   (your code + \"{t}\")" for n, t in variants[:6])
+                    + "\nA suffix marks a different variant ('/SL' = strobe light & audio alarm). "
+                      "Tell the user the catalog carries that variant; you may look it up and give its "
+                      "specs, clearly labelled as the variant's specs, never as the plain code's.")
         # family / prefix matches, then fuzzy
         family = [(n, p) for n, _, p in self.index if literal(n).startswith(q) or q.startswith(literal(n))]
         scored = sorted(((difflib.SequenceMatcher(None, q, literal(n)).ratio(), n, p) for n, _, p in self.index),
