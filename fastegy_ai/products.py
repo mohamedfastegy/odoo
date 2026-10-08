@@ -212,7 +212,13 @@ class Catalog:
                 hits.append((n, p))
                 seen.add(id(p))
         if hits:
-            return "exact", ("\n\n".join(self.describe(p, matched=n) for n, p in hits) + "\n\n"
+            poe = [p for _, p in hits if any(re.search(r"/\d*P\s*:\s*PoE", x) for x in p["specs"])]
+            if poe and not re.search(r"/\d*P\b", q):         # DS-7608NXI-K1 has no PoE; DS-7608NXI-K1/8P has
+                poe_note = ("\n\nPoE: in this entry '/P: PoE' means only the /P versions (e.g. .../8P, .../16P) "
+                            "have PoE ports. The code asked about has no /P, so it has no built-in PoE ports.")
+            else:
+                poe_note = ""
+            return "exact", ("\n\n".join(self.describe(p, matched=n) for n, p in hits) + poe_note + "\n\n"
                              "Brochure notation: X = resolution digit listed in the specs; parts in brackets "
                              "like (/SL) or (RB) are optional variants; '/SL' = strobe light & audio alarm variant.\n"
                              "These are key specs only; for the full datasheet values, say so and do not invent them.")
@@ -259,6 +265,8 @@ class Catalog:
                 lines.append("Category / tags: " + ", ".join(tags))
             if m.get("ar"):
                 lines.append("FastEgy description (Arabic, written by FastEgy): " + m["ar"])
+            else:
+                lines.append("FastEgy description: none in Odoo, so only the tags above are known.")
             lines.append("The list says nothing about stock or price: do not claim either.")
             return "exact", "\n".join(lines)
         related = []
@@ -312,7 +320,7 @@ class Catalog:
                 out.append(f"FastEgy product list: {len(rows)} models matching '{text}' ({top}/{len(terms)} keywords):")
                 for sc, m in rows:
                     out.append(f"- {m['code']} | tags: {', '.join(m.get('tags', []))} | FastEgy description: "
-                               f"{m.get('ar') or '(none)'}{mark(sc, top)}")
+                               f"{m.get('ar') or 'none in Odoo (only the tags are known)'}{mark(sc, top)}")
         top, rows = best(self.products, lambda p: " ".join(
             [*p["codes"], *(p.get("labels") or []), p.get("category") or "", p.get("series") or "",
              *p["specs"]]))
