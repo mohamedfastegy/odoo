@@ -10,6 +10,7 @@ Lookup never guesses: it reports an exact match, or the closest catalog codes as
 """
 import difflib
 import json
+import os
 import re
 
 SPACES = re.compile(r"\s+")
@@ -70,6 +71,16 @@ def literal(code):
     return re.sub(r"\([^)]*\)", "", code)
 
 
+RES = re.compile(r"(?:\bcamera\s*)?(\d+)\s*(?:mp\b|megapixels?\b|ميجا\S*)|\bcamera\s*(\d+)m\b")
+AR = str.maketrans("ةأإآى", "هاااي")
+
+
+def search_tokens(text):
+    """Lower-case word tokens; '4 MP', '4MP', '4 ميجا', 'Camera 4M' all become '4mp'."""
+    t = RES.sub(lambda m: f" {m.group(1) or m.group(2)}mp ", text.lower()).translate(AR)
+    return re.findall(r"[^\W_]+", t)
+
+
 VARIANT_TAIL = re.compile(r"(?:/[A-Z0-9]+|\([^)]*\))$")
 
 
@@ -86,7 +97,7 @@ def variant_bases(code):
 
 
 class Catalog:
-    def __init__(self, path):
+    def __init__(self, path, carried_path=None):
         data = json.load(open(path, encoding="utf-8"))
         self.source = data.get("meta", {}).get("source", "catalog")
         self.products = data["products"]
@@ -98,6 +109,13 @@ class Catalog:
             for c in names:
                 n = norm(c if c.startswith(("DS", "IDS", "AE", "HF", "HW")) else "DS-" + c)
                 self.index.append((n, code_pattern(n, p["specs"]), p))
+        # FastEgy's own product list (kb/odoo_products.py), optional
+        self.carried, self.carried_index, self.carried_source = None, {}, None
+        if carried_path and os.path.exists(carried_path):
+            data = json.load(open(carried_path, encoding="utf-8"))
+            self.carried_source = data.get("meta", {}).get("source", "FastEgy product list")
+            self.carried = data["models"]
+            self.carried_index = {norm(m["code"]): m for m in self.carried}
 
     # ------------------------------------------------------------- formatting
     def describe(self, p, matched=None):
@@ -124,19 +142,42 @@ class Catalog:
         q = norm_query(query)
         if not q:
             return "Give a model code, e.g. DS-2CD2043G2-LIZ2UY."
+        b_kind, b_text = self._brochure(q)
+        if self.carried is None:                      # brochure only
+            return self._answer(query, [(b_kind, "", b_text)])
+        c_kind, c_text = self._carried(q)
+        if b_kind == "exact" and c_kind in ("near", "none"):
+            c_kind, c_text = "none", "Not in FastEgy's product list (the Odoo export)."
+        parts = [(c_kind, "== FastEgy product list (Odoo) ==", c_text)]
+        if not (c_kind == "exact" and b_kind in ("near", "none")):     # no brochure guesses next to a hit
+            parts.append((b_kind, "== Hikvision brochure ==", b_text))
+        return self._answer(query, parts)
+
+    def _answer(self, query, parts):
+        kinds = [k for k, _, _ in parts]
+        body = "\n\n".join((h + "\n" + t).strip() for _, h, t in parts)
+        if "exact" in kinds:
+            return f"EXACT MATCH for {query}:\n\n{body}"
+        if any(k in ("variant", "near") for k in kinds):
+            return (f"NO EXACT MATCH for {query}.\n\n{body}\n\n"
+                    "Ask the user which one they mean, or look up one of these codes. "
+                    "Do not give specs for a code that did not match exactly.")
+        where = "the " + self.source + (" or FastEgy's product list" if self.carried is not None else "")
+        return f"NOT FOUND: {query} is not in {where}. Do not guess its specs; say it is not in the catalog."
+
+    def _brochure(self, q):
+        """(kind, text): kind is exact / variant / near / none."""
         hits, seen = [], set()
         for n, pat, p in self.index:
             if pat.match(q) and id(p) not in seen:
                 hits.append((n, p))
                 seen.add(id(p))
-        notation = ("Brochure notation: X = resolution digit listed in the specs; "
-                    "parts in brackets like (/SL) or (RB) are optional variants; "
-                    "'/SL' = strobe light & audio alarm variant.")
         if hits:
-            body = "\n\n".join(self.describe(p, matched=n) for n, p in hits)
-            return (f"EXACT MATCH for {query}:\n\n{body}\n\n{notation}\n"
-                    "These are key specs only; for the full datasheet values, say so and do not invent them.")
-        # the catalog may list only a suffixed variant of the code (…/SL, …/8P): say so explicitly
+            return "exact", ("\n\n".join(self.describe(p, matched=n) for n, p in hits) + "\n\n"
+                             "Brochure notation: X = resolution digit listed in the specs; parts in brackets "
+                             "like (/SL) or (RB) are optional variants; '/SL' = strobe light & audio alarm variant.\n"
+                             "These are key specs only; for the full datasheet values, say so and do not invent them.")
+        # the brochure may list only a suffixed variant of the code (…/SL, …/8P): say so explicitly
         variants, seen = [], set()
         for n, _, p in self.index:
             for base, tail in variant_bases(n):
@@ -145,12 +186,11 @@ class Catalog:
                     seen.add(id(p))
                     break
         if variants:
-            return (f"NO EXACT MATCH for {query}. The catalog lists only a variant of this code "
-                    "with an extra suffix:\n"
-                    + "\n".join(f"  - {n}   (your code + \"{t}\")" for n, t in variants[:6])
-                    + "\nA suffix marks a different variant ('/SL' = strobe light & audio alarm). "
-                      "Tell the user the catalog carries that variant; you may look it up and give its "
-                      "specs, clearly labelled as the variant's specs, never as the plain code's.")
+            return "variant", ("The brochure lists only a variant of this code with an extra suffix:\n"
+                               + "\n".join(f"  - {n}   (your code + \"{t}\")" for n, t in variants[:6])
+                               + "\nA suffix marks a different variant ('/SL' = strobe light & audio alarm). "
+                                 "You may look the variant up and give its specs, clearly labelled as the "
+                                 "variant's specs, never as the plain code's.")
         # family / prefix matches, then fuzzy
         family = [(n, p) for n, _, p in self.index if literal(n).startswith(q) or q.startswith(literal(n))]
         scored = sorted(((difflib.SequenceMatcher(None, q, literal(n)).ratio(), n, p) for n, _, p in self.index),
@@ -162,34 +202,80 @@ class Catalog:
         for r, n, p in scored:
             if r >= 0.72 and id(p) not in seen and len(cands) < 6:
                 cands.append(n); seen.add(id(p))
-        if not cands:
-            return (f"NOT FOUND: {query} is not in the {self.source}. "
-                    "Do not guess its specs; say it is not in the catalog.")
-        return (f"NO EXACT MATCH for {query}. Closest codes in the catalog:\n"
-                + "\n".join(f"  - {c}" for c in cands[:6])
-                + "\nAsk the user which one they mean, or look up one of these codes. "
-                  "Do not give specs for a code that did not match exactly.")
+        if cands:
+            return "near", "Closest codes in the brochure:\n" + "\n".join(f"  - {c}" for c in cands[:6])
+        return "none", f"Not in the {self.source}."
 
-    def search(self, text, limit=10):
-        """Keyword search over codes, series, category and specs (e.g. 'ColorVu 8 MP bullet')."""
-        terms = [t for t in re.split(r"[\s,]+", text.lower()) if t]
+    def _carried(self, q):
+        """(kind, text) for FastEgy's own product list."""
+        m = self.carried_index.get(q)
+        if m:
+            lines = [f"FastEgy carries {m['code']}: it is in FastEgy's product list ({self.carried_source})."]
+            if m["names"] != [m["code"]]:
+                lines.append("Product names in Odoo: " + "; ".join(m["names"][:12]))
+            if m.get("lens"):
+                lines.append("Lens options: " + ", ".join(m["lens"]))
+            tags = [x for x in [m.get("category"), *m.get("tags", [])] if x]
+            if tags:
+                lines.append("Category / tags: " + ", ".join(tags))
+            if m.get("ar"):
+                lines.append("FastEgy description (Arabic, written by FastEgy): " + m["ar"])
+            lines.append("The list says nothing about stock or price: do not claim either.")
+            return "exact", "\n".join(lines)
+        related = []
+        for code, mm in self.carried_index.items():          # the list has a suffixed variant of the code
+            for base, tail in variant_bases(code):
+                if base == q:
+                    related.append(f"  - {mm['code']}   (your code + \"{tail}\")")
+                    break
+        for base, tail in variant_bases(q):                   # ...or the code without the user's suffix
+            if base in self.carried_index:
+                related.append(f"  - {self.carried_index[base]['code']}   (your code without \"{tail}\")")
+        if related:
+            return "variant", "FastEgy's product list has related codes, not this exact one:\n" + "\n".join(related[:6])
+        scored = sorted(((difflib.SequenceMatcher(None, q, code).ratio(), mm["code"])
+                         for code, mm in self.carried_index.items()), reverse=True)
+        near = [c for r, c in scored[:5] if r >= 0.8]
+        if near:
+            return "near", "Closest codes in FastEgy's product list:\n" + "\n".join(f"  - {c}" for c in near)
+        return "none", "Not in FastEgy's product list."
+
+    def search(self, text, limit=8):
+        """Keyword search (English or Arabic) over FastEgy's product list and the brochure."""
+        terms = list(dict.fromkeys(search_tokens(text)))
         if not terms:
-            return "Give some keywords, e.g. 'ColorVu 4 MP turret' or '16-ch NVR PoE'."
-        ranked = []
-        for p in self.products:
-            blob = " ".join([*p["codes"], *(p.get("labels") or []), p.get("category") or "",
-                             p.get("series") or "", *p["specs"]]).lower()
-            score = sum(1 for t in terms if t in blob)
-            if score:
-                ranked.append((score, p))
-        ranked.sort(key=lambda t: (-t[0], t[1]["page"]))
-        if not ranked:
+            return "Give some keywords, e.g. 'ColorVu 4 MP turret', '16-ch NVR PoE' or 'كاميرا خارجية 4 ميجا'."
+
+        def hits(blob):
+            toks = set(search_tokens(blob))
+            flat = " ".join(toks)
+            return sum(1 for t in terms if t in toks or (len(t) >= 4 and t in flat))
+
+        def best(items, blob_of):
+            ranked = [(hits(blob_of(x)), x) for x in items]
+            ranked = [(s, x) for s, x in ranked if s]
+            if not ranked:
+                return 0, []
+            top = max(s for s, _ in ranked)
+            return top, [x for s, x in ranked if s == top][:limit]
+
+        out = []
+        if self.carried is not None:
+            top, rows = best(self.carried, lambda m: " ".join(
+                [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or ""]))
+            if rows:
+                out.append(f"FastEgy product list: {len(rows)} models matching '{text}' ({top}/{len(terms)} keywords):")
+                for m in rows:
+                    out.append(f"- {m['code']} | {', '.join(m.get('tags', [])[:5])} | {(m.get('ar') or '')[:160]}")
+        top, rows = best(self.products, lambda p: " ".join(
+            [*p["codes"], *(p.get("labels") or []), p.get("category") or "", p.get("series") or "",
+             *p["specs"]]))
+        if rows:
+            out.append(f"Hikvision brochure: {len(rows)} entries matching '{text}' ({top}/{len(terms)} keywords):")
+            for p in rows:
+                out.append(f"- {', '.join(p['codes'])} | {p.get('series') or p.get('category')} | "
+                           + "; ".join(p["specs"][:4]) + f" (page {p['page']})")
+        if not out:
             return f"No catalog entries match: {text}"
-        best = ranked[0][0]
-        rows = [p for s, p in ranked if s == best][:limit]
-        out = [f"{len(rows)} catalog entries matching '{text}' ({best}/{len(terms)} keywords):"]
-        for p in rows:
-            out.append(f"- {', '.join(p['codes'])} | {p.get('series') or p.get('category')} | "
-                       + "; ".join(p["specs"][:4]) + f" (page {p['page']})")
         out.append("Use lookup_product on a code for its full entry.")
         return "\n".join(out)

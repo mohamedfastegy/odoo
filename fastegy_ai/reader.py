@@ -13,8 +13,10 @@ GET /search?...
 POST /mcp
     Minimal MCP server (streamable HTTP, JSON responses) exposing the product catalog to
     LibreChat: lookup_product(code) and search_catalog(keywords). See products.py.
+    Two sources: the Hikvision brochure (CATALOG_PATH) and FastEgy's own product list from
+    Odoo (CARRIED_PATH, optional, built by kb/odoo_products.py). Both reload when replaced.
 
-Version 3 — 2026-10-08
+Version 4 — 2026-10-08
 """
 import ipaddress
 import json
@@ -37,6 +39,7 @@ MAX_CHARS = int(os.environ.get("READER_MAX_CHARS", "20000"))
 SEARXNG = os.environ.get("SEARXNG_UPSTREAM", "http://searxng:8080/search")
 ENGINES = os.environ.get("SEARCH_ENGINES", "yahoo,startpage,yandex")
 CATALOG_PATH = os.environ.get("CATALOG_PATH", "/app/catalog.json")
+CARRIED_PATH = os.environ.get("CARRIED_PATH", "/app/carried.json")
 MCP_KEY = os.environ.get("MCP_KEY", "")
 MAX_BYTES = 3_000_000
 MAX_PDF_BYTES = 15_000_000
@@ -104,26 +107,29 @@ _catalog = {"mtime": None, "obj": None}
 
 
 def catalog():
-    """Load the catalog JSON, reloading when the file changes (no restart needed)."""
-    mtime = os.path.getmtime(CATALOG_PATH)
+    """Load the catalog files, reloading when one of them changes (no restart needed)."""
+    mtime = tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in (CATALOG_PATH, CARRIED_PATH))
     if _catalog["mtime"] != mtime:
-        _catalog["obj"], _catalog["mtime"] = products.Catalog(CATALOG_PATH), mtime
+        _catalog["obj"], _catalog["mtime"] = products.Catalog(CATALOG_PATH, CARRIED_PATH), mtime
     return _catalog["obj"]
 
 
 MCP_TOOLS = [
     {"name": "lookup_product",
-     "description": ("Look up a Hikvision / EZVIZ model code in FastEgy's product catalog. Call this FIRST "
-                     "whenever the user mentions or asks about a model code, before searching the web. "
-                     "Returns the exact catalog entry with its key specs, or the closest codes when there "
-                     "is no exact match. Never state specs for a code this tool did not match exactly."),
+     "description": ("Look up a Hikvision / EZVIZ model code. Call this FIRST whenever the user mentions "
+                     "or asks about a model code, before searching the web. Answers from two sources: "
+                     "FastEgy's own product list from Odoo (whether FastEgy sells the model, lens options, "
+                     "FastEgy's Arabic description) and the Hikvision brochure (official key specs). Returns "
+                     "the exact entries, or the closest codes when there is no exact match. Never state specs "
+                     "for a code this tool did not match exactly."),
      "inputSchema": {"type": "object", "properties": {"code": {"type": "string",
                      "description": "Model code as the user wrote it, e.g. DS-2CD2043G2-LIZ2UY"}},
                      "required": ["code"]}},
     {"name": "search_catalog",
-     "description": ("Search FastEgy's product catalog by keywords (technology, resolution, series, "
-                     "channels...), e.g. 'ColorVu 4 MP' or '16-ch NVR PoE'. Use it to recommend or "
-                     "compare products we carry."),
+     "description": ("Search the products FastEgy sells (Odoo list, Arabic descriptions) and the Hikvision "
+                     "brochure by keywords in English or Arabic, e.g. 'ColorVu 4 MP', '16-ch NVR PoE', "
+                     "'كاميرا خارجية 4 ميجا مايك' or 'سويتش 8 بورت PoE'. Use it to recommend or compare "
+                     "products we carry."),
      "inputSchema": {"type": "object", "properties": {"keywords": {"type": "string"}},
                      "required": ["keywords"]}},
 ]
@@ -138,7 +144,7 @@ def mcp_dispatch(msg):
         if method == "initialize":
             result = {"protocolVersion": params.get("protocolVersion", "2025-03-26"),
                       "capabilities": {"tools": {"listChanged": False}},
-                      "serverInfo": {"name": "fastegy-products", "version": "3"},
+                      "serverInfo": {"name": "fastegy-products", "version": "4"},
                       "instructions": "FastEgy product catalog: use lookup_product for any model code."}
         elif method == "ping":
             result = {}
