@@ -7,10 +7,17 @@ www.hikvision.com), keeps the first one whose text names this exact code (newest
 and stores its title, key features and specification text. products.py shows them in
 lookup_product. Progress is saved after every model, so the job can stop and resume.
 
+The search engines are the ones the assistant's web search uses, and SearXNG suspends an engine
+for up to 24 hours after a CAPTCHA, "too many requests" or "access denied". So the job stops as
+soon as any engine reports one of those, and the assistant keeps the engines that still answer.
+
 Usage:
   python /app/ds_collect.py --carried /data/carried.json --out /data/ds/datasheets.json
-         [--all] [--limit N] [--now] [--start 22] [--stop 7] [--sleep 45]
-  --now    ignore the night window (for a short test with --limit)
+         [--all] [--limit N] [--now] [--start 22] [--stop 7] [--sleep 45] [--day-sleep 60]
+  --now        ignore the night window (for a short test with --limit)
+  --day-sleep  also work outside the night window, this many seconds between searches
+
+Version 1.1 — 2026-10-08: stops on an engine block; optional daytime pace.
 """
 import argparse
 import datetime
@@ -29,6 +36,7 @@ SEARCH = os.environ.get("SEARCH_URL", "http://fastegy-reader:3002/search")
 OFFICIAL = re.compile(r"^https://(?:assets\.hikvision\.com|www\.hikvision\.com)/\S+\.pdf$", re.I)
 CAIRO = ZoneInfo("Africa/Cairo")
 SPEC_END = ("Available Model", "Physical Interface", "Accessor", "Typical Application")   # and a lone "Dimension"
+BLOCK = ("captcha", "too many requests", "access denied")             # SearXNG's wording
 PRIORITY = ("ip camera", "camera", "analog", "nvr", "dvr", "switch", "access", "face", "intercom",
             "monitor", "audio")
 
@@ -72,9 +80,16 @@ def parse(text, code):
 
 
 def search(code):
+    """SearXNG's JSON reply: "results", and "unresponsive_engines" as [engine, reason] pairs."""
     q = urllib.parse.urlencode({"q": f"{code} datasheet", "format": "json"})
     with urllib.request.urlopen(SEARCH + "?" + q, timeout=40) as r:
-        return json.load(r).get("results", [])
+        return json.load(r)
+
+
+def blocks(reply):
+    """The engines that report a block ("CAPTCHA", "Suspended: too many requests", ...), not timeouts."""
+    return [f"{e[0]}: {e[1]}" for e in reply.get("unresponsive_engines") or []
+            if isinstance(e, list) and len(e) == 2 and any(word in str(e[1]).lower() for word in BLOCK)]
 
 
 def pdf_text(url):
@@ -102,8 +117,7 @@ def candidates(code, results):
     return [u for _, _, u in named + other]
 
 
-def collect(code, max_pdfs=3):
-    results = search(code)
+def collect(code, results, max_pdfs=3):
     tried = []
     for url in candidates(code, results)[:max_pdfs]:
         tried.append(url)
@@ -146,6 +160,8 @@ def main():
     ap.add_argument("--start", type=int, default=22, help="Cairo hour the window opens")
     ap.add_argument("--stop", type=int, default=7, help="Cairo hour the window closes")
     ap.add_argument("--sleep", type=float, default=45, help="seconds between searches")
+    ap.add_argument("--day-sleep", type=float, default=0,
+                    help="also work outside the window, this many seconds between searches (0: wait)")
     a = ap.parse_args()
 
     models = json.load(open(a.carried, encoding="utf-8"))["models"]
@@ -158,29 +174,37 @@ def main():
         todo = todo[:a.limit]
     print(f"{len(todo)} models to check; {sum(r['status'] == 'found' for r in records.values())} datasheets already kept",
           flush=True)
-    errors = 0
+    errors, blocked = 0, []
     for n, code in enumerate(todo, 1):
-        while not a.now and not in_window(a.start, a.stop):
+        while not a.now and not a.day_sleep and not in_window(a.start, a.stop):
             print(f"outside {a.start}:00-{a.stop}:00 Cairo; waiting", flush=True)
             time.sleep(600)
+        night, blocked = a.now or in_window(a.start, a.stop), []
         try:
-            rec = collect(code)
+            reply = search(code)
+            blocked = blocks(reply)
+            rec = collect(code, reply.get("results", []))
             errors = 0
         except Exception as e:                    # search down or blocked: keep going, slower
             rec = {"code": code, "status": "error", "error": str(e)[:200]}
             errors += 1
-        rec["checked"] = datetime.datetime.now(CAIRO).isoformat(timespec="seconds")
-        records[code] = rec
-        save(a.out, list(records.values()))
+        if not blocked or rec["status"] == "found":   # a miss while an engine is blocked is checked again later
+            rec["checked"] = datetime.datetime.now(CAIRO).isoformat(timespec="seconds")
+            records[code] = rec
+            save(a.out, list(records.values()))
         print(f"[{n}/{len(todo)}] {code}: {rec['status']} {rec.get('url', '')}", flush=True)
+        if blocked:
+            print(f"STOPPED: {'; '.join(blocked)}. Stopped so the assistant's web search keeps its other engines;"
+                  " start the job again later and it resumes here.", flush=True)
+            break
         if errors >= 5:
             print("5 search errors in a row; pausing 20 minutes", flush=True)
             time.sleep(1200)
             errors = 0
         if n < len(todo):
-            time.sleep(a.sleep)
+            time.sleep(a.sleep if night else a.day_sleep)
     found = sum(r["status"] == "found" for r in records.values())
-    print(f"done: {found} datasheets kept of {len(records)} models checked", flush=True)
+    print(f"{'stopped' if blocked else 'done'}: {found} datasheets kept of {len(records)} models checked", flush=True)
 
 
 if __name__ == "__main__":
