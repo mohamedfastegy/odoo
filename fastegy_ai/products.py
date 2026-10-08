@@ -75,10 +75,45 @@ RES = re.compile(r"(?:\bcamera\s*)?(\d+)\s*(?:mp\b|megapixels?\b|ميجا\S*)|\b
 AR = str.maketrans("ةأإآى", "هاااي")
 
 
+# Arabic and English words for the same thing (the Odoo tags are English, the descriptions Arabic)
+SYNONYMS = {
+    "ch": ("ch", "channel", "channels", "قناه", "قنوات", "port", "ports", "بورت"),
+    "camera": ("camera", "cameras", "كاميرا", "كاميره", "كاميرات"),
+    "outdoor": ("outdoor", "external", "خارجيه", "خارجي"),
+    "indoor": ("indoor", "internal", "داخليه", "داخلي"),
+    "mic": ("mic", "microphone", "مايك", "ميكروفون", "ميك"),
+    "speaker": ("speaker", "سبيكر"),
+    "switch": ("switch", "switches", "سويتش"),
+    "hybrid": ("hybrid", "hyprid", "هايبرد"),
+    "colorvu": ("colorvu",),
+}
+SYN = {w: k for k, words in SYNONYMS.items() for w in words}
+
+
 def search_tokens(text):
-    """Lower-case word tokens; '4 MP', '4MP', '4 ميجا', 'Camera 4M' all become '4mp'."""
+    """Lower-case word tokens; '4 MP', '4MP', '4 ميجا', 'Camera 4M' all become '4mp', and the
+    Arabic / English words above become one word ('مايك' and 'Mic' -> 'mic')."""
     t = RES.sub(lambda m: f" {m.group(1) or m.group(2)}mp ", text.lower()).translate(AR)
-    return re.findall(r"[^\W_]+", t)
+    t = re.sub(r"(?:كلر|كولر)\s*فيو?|color\s*vu", " colorvu ", t)
+    return [synonym(w) for w in re.findall(r"[^\W_]+", t)]
+
+
+def synonym(word):
+    """'بمايك', 'والمايك' -> 'mic': Arabic prefixes are dropped when the rest is a known word."""
+    if word in SYN:
+        return SYN[word]
+    for prefix in ("بال", "وال", "لل", "ال", "ب", "و"):
+        if word.startswith(prefix) and word[len(prefix):] in SYN:
+            return SYN[word[len(prefix):]]
+    return word
+
+
+def looks_like_code(text):
+    """True for model codes (DS-2CD1043G2-LIU, iDS-7208HUHI-M2/S); False for keywords."""
+    if re.search(r"[\u0600-\u06FF]", text):
+        return False
+    q = norm_query(text)
+    return bool(re.search(r"[A-Z0-9]-[A-Z0-9]", q) and re.search(r"\d", q) and len(q) >= 6)
 
 
 VARIANT_TAIL = re.compile(r"(?:/[A-Z0-9]+|\([^)]*\))$")
@@ -142,6 +177,9 @@ class Catalog:
         q = norm_query(query)
         if not q:
             return "Give a model code, e.g. DS-2CD2043G2-LIZ2UY."
+        if not looks_like_code(query):                # e.g. "ColorVu 4 ميجا": search instead
+            return (f"NOT A MODEL CODE: '{query}' is a description, so here is the catalog search for it.\n"
+                    + self.search(query))
         b_kind, b_text = self._brochure(q)
         if self.carried is None:                      # brochure only
             return self._answer(query, [(b_kind, "", b_text)])
@@ -253,12 +291,18 @@ class Catalog:
             return sum(1 for t in terms if t in toks or (len(t) >= 4 and t in flat))
 
         def best(items, blob_of):
+            """Items with the most keywords; with 3+ keywords also those missing one, marked."""
             ranked = [(hits(blob_of(x)), x) for x in items]
             ranked = [(s, x) for s, x in ranked if s]
             if not ranked:
                 return 0, []
             top = max(s for s, _ in ranked)
-            return top, [x for s, x in ranked if s == top][:limit]
+            floor = top - 1 if len(terms) >= 3 and top >= 2 else top
+            rows = sorted(((s, x) for s, x in ranked if s >= floor), key=lambda t: -t[0])[:limit]
+            return top, rows
+
+        def mark(score, top):
+            return "" if score == top else f"  [matches {score}/{len(terms)} keywords]"
 
         out = []
         if self.carried is not None:
@@ -266,17 +310,21 @@ class Catalog:
                 [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or ""]))
             if rows:
                 out.append(f"FastEgy product list: {len(rows)} models matching '{text}' ({top}/{len(terms)} keywords):")
-                for m in rows:
-                    out.append(f"- {m['code']} | {', '.join(m.get('tags', [])[:5])} | {(m.get('ar') or '')[:160]}")
+                for sc, m in rows:
+                    out.append(f"- {m['code']} | tags: {', '.join(m.get('tags', []))} | FastEgy description: "
+                               f"{m.get('ar') or '(none)'}{mark(sc, top)}")
         top, rows = best(self.products, lambda p: " ".join(
             [*p["codes"], *(p.get("labels") or []), p.get("category") or "", p.get("series") or "",
              *p["specs"]]))
+        if out:
+            rows = rows[:4]                   # FastEgy's own models first; a few brochure ones for reference
         if rows:
             out.append(f"Hikvision brochure: {len(rows)} entries matching '{text}' ({top}/{len(terms)} keywords):")
-            for p in rows:
+            for sc, p in rows:
                 out.append(f"- {', '.join(p['codes'])} | {p.get('series') or p.get('category')} | "
-                           + "; ".join(p["specs"][:4]) + f" (page {p['page']})")
+                           + "; ".join(p["specs"][:8]) + f" (page {p['page']}){mark(sc, top)}")
         if not out:
             return f"No catalog entries match: {text}"
-        out.append("Use lookup_product on a code for its full entry.")
+        out.append("These lines are everything known about these models here: do not add specs that are not "
+                   "written above. Use lookup_product on a code for its full entry.")
         return "\n".join(out)
