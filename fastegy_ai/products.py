@@ -282,6 +282,13 @@ class Catalog:
                 lines.append("  " + ds.get("title", m["code"]))
                 if ds.get("features"):
                     lines.append("  Key features: " + "; ".join(ds["features"][:8]))
+                text = "\n".join([*ds.get("features", []), ds.get("spec", "")])
+                title = ds.get("title", "").split(" — ")[0]          # e.g. "DS-2CD1027G2-L(UF)"
+                if ("(" in title or re.search(r"^\s*-[A-Z0-9/]{1,6}\s*:", text, re.M)
+                        or "(Optional)" in text):
+                    lines.append(f"  Note: this datasheet covers several versions. Lines starting with '-U:', '-F:', "
+                                 f"'-SL:' and the like, and features marked (Optional), apply only to versions with "
+                                 f"that suffix; {m['code']} has only what its own code shows.")
                 lines.append("  Specification:\n" + "\n".join("    " + x for x in ds["spec"][:3000].split("\n")))
             lines.append("The list says nothing about stock or price: do not claim either.")
             return "exact", "\n".join(lines)
