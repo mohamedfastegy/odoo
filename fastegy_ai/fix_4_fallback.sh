@@ -12,13 +12,15 @@
 #             and the chat aborts instead of falling back (4 times last night).
 # Change : - remove the googleSearch tool from fastegy-fallback only
 #          - load fastegy_litellm_patch.py (maps Groq's text codes to 503, so the
-#            router falls back to fastegy-fallback), via litellm_settings.callbacks
-#            and a docker-compose.override.yml that mounts it into the container
-#          - recreate the litellm container (same image, no pull)
-# Safety : backup first; image guard; automatic rollback (config, files, container)
-#          if any test fails. Keys are read from the existing files, never printed.
+#            router falls back to fastegy-fallback), via litellm_settings.callbacks:
+#            copied into the running container, which is only restarted (not
+#            recreated: compose would not rebuild it identically), plus a
+#            docker-compose.override.yml that mounts it if the container is ever
+#            recreated later
+# Safety : backup first; automatic rollback (config, files, restart) if any test
+#          fails. Keys are read from the existing files, never printed.
 # Run    : sudo bash fix_4_fallback.sh
-# Version: 1.0 — 2026-10-08
+# Version: 1.1 — 2026-10-08 (1.0 recreated the container; its guard stopped it)
 # =============================================================================
 set -euo pipefail
 
@@ -40,17 +42,6 @@ docker inspect "$CTR" >/dev/null 2>&1 || { echo "Container $CTR not found"; exit
 if [ -e "$OVR" ] && ! grep -q fastegy_litellm_patch "$OVR"; then
   echo "$OVR already exists and is not ours; nothing changed"; exit 1
 fi
-# recreating must not switch LiteLLM versions: the running image has to be the local tag
-IMG=$(docker inspect -f '{{.Config.Image}}' "$CTR")
-[ "$(docker inspect -f '{{.Image}}' "$CTR")" = "$(docker image inspect -f '{{.Id}}' "$IMG" 2>/dev/null)" ] ||
-  { echo "The local image $IMG is newer than the running container; nothing changed (send this to Claude)"; exit 1; }
-# ...nor pick up unrelated edits made to docker-compose.yml since the container was created
-if [ ! -e "$OVR" ]; then
-  [ "$(cd "$DIR" && docker compose config --hash "$CTR" 2>/dev/null | awk '{print $2}')" = \
-    "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$CTR")" ] ||
-    { echo "docker-compose.yml changed since $CTR was created; nothing changed (send this to Claude)"; exit 1; }
-fi
-
 TS=$(date +%Y%m%d_%H%M%S)
 BAK="$CFG.bak.$TS"; [ -e "$BAK" ] && BAK="$BAK.$$"
 TMP=$(mktemp); STAGE=$(mktemp -d)
@@ -86,7 +77,9 @@ if ! docker exec -i "$CTR" python3 -c "$PY" "$CB" <"$CFG" >"$TMP"; then
 fi
 grep -q "$CB" "$TMP" && grep -q 'fastegy-fallback' "$TMP" || { echo "Rewrite produced unexpected output; nothing changed"; exit 1; }
 
-up() { (cd "$DIR" && docker compose up -d --pull never "$CTR" >/dev/null 2>&1); }
+load_patch() {   # the running container reads /app/fastegy_litellm_patch.py after a restart
+  docker cp "$PATCH" "$CTR:/app/fastegy_litellm_patch.py" && docker restart "$CTR" >/dev/null
+}
 wait_live() {
   for _ in $(seq 1 60); do
     curl -s -m 3 http://127.0.0.1:4000/health/liveliness >/dev/null 2>&1 && return 0
@@ -97,9 +90,12 @@ wait_live() {
 rollback() {
   echo "!! $1 — rolling back"
   cat "$BAK" >"$CFG"
-  grep -q "$CB" "$BAK" || rm -f "$OVR" "$PATCH"     # a re-run's backup still needs the patch file
-  up || docker restart "$CTR" >/dev/null
-  wait_live && echo "Restored $BAK; litellm is back as before." || echo "litellm did not come back: run  cd $DIR && docker compose up -d"
+  if ! grep -q "$CB" "$BAK"; then      # a re-run's backup still needs the patch file
+    rm -f "$OVR" "$PATCH"
+    docker exec "$CTR" rm -f /app/fastegy_litellm_patch.py 2>/dev/null || true
+  fi
+  docker restart "$CTR" >/dev/null || true
+  wait_live && echo "Restored $BAK; litellm is back as before." || echo "litellm did not come back: run  docker restart $CTR"
   exit 1
 }
 
@@ -113,8 +109,8 @@ services:
       - ./fastegy_litellm_patch.py:/app/fastegy_litellm_patch.py:ro
 YML
 
-echo "Recreating $CTR (same image)..."
-up || rollback "docker compose up failed"
+echo "Restarting $CTR with the patch..."
+load_patch || rollback "could not copy the patch or restart"
 wait_live || rollback "litellm did not start"
 sleep 3
 docker logs --since 5m "$CTR" 2>&1 | grep -m1 FASTEGY_PATCH || echo "WARNING: no FASTEGY_PATCH line in the logs"
@@ -155,4 +151,4 @@ for r in "$fast" "$smart" "$fbk" "$fbs" "$mock"; do
   [[ ${r%%$'\n'*} == OK* ]] || rollback "a test failed"
 done
 echo "DONE fix 4. Backup kept at: $BAK"
-echo "Undo later:  cat $BAK > $CFG && rm $OVR $PATCH && cd $DIR && docker compose up -d --pull never litellm"
+echo "Undo later:  cat $BAK > $CFG && rm $OVR $PATCH && docker restart $CTR"
