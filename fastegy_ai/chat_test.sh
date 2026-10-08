@@ -9,7 +9,8 @@
 # Changes nothing and prints no keys.
 # Run    : bash chat_test.sh                      (the three standard questions)
 #          bash chat_test.sh "سؤال 1" "سؤال 2"    (your own questions)
-# Version: 1.0 — 2026-10-08
+#          ONLY=fastegy-strong bash chat_test.sh   (one option only)
+# Version: 1.1 — 2026-10-08 (web search now reads the top pages, as LibreChat does)
 # =============================================================================
 set -euo pipefail
 
@@ -53,9 +54,18 @@ async function runTool(name, args) {
     const r = await rpc("tools/call", { name: name.slice(0, -SUFFIX.length), arguments: args });
     return r.result ? r.result.content[0].text : "tool error: " + JSON.stringify(r.error);
   }
-  if (name === "web_search") {
+  if (name === "web_search") {       // like LibreChat: search, then read the top pages through the reader
     const d = await (await fetch(READER + "/search?format=json&q=" + encodeURIComponent(args.query || ""))).json();
-    return JSON.stringify((d.results || []).slice(0, 5).map(x => ({ title: x.title, url: x.url, content: (x.content || "").slice(0, 300) })));
+    const top = (d.results || []).slice(0, 3);
+    const pages = await Promise.all(top.map(async x => {
+      try {
+        const r = await (await fetch(READER + "/v2/scrape", { method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + MKEY },
+          body: JSON.stringify({ url: x.url, timeout: 15000 }) })).json();
+        return { title: x.title, url: x.url, content: r.success ? r.data.markdown.slice(0, 3000) : (x.content || "") };
+      } catch (e) { return { title: x.title, url: x.url, content: x.content || "" }; }
+    }));
+    return JSON.stringify(pages) + "\nsources read: " + top.map(x => x.url).join(" ");
   }
   return "unknown tool " + name;
 }
@@ -80,7 +90,8 @@ async function chat(spec, tools, question) {
         let args = {};
         try { args = JSON.parse(tc.function.arguments || "{}"); } catch (e) {}
         const out = await runTool(tc.function.name, args);
-        trace.push(tc.function.name.replace(SUFFIX, "") + " " + JSON.stringify(args) + "  ->  " + out.split("\n")[0].slice(0, 90));
+        const first = tc.function.name === "web_search" ? out.split("\n").pop() : out.split("\n")[0];
+        trace.push(tc.function.name.replace(SUFFIX, "") + " " + JSON.stringify(args) + "  ->  " + first.slice(0, 160));
         messages.push({ role: "tool", tool_call_id: tc.id, content: out.slice(0, 12000) });
       }
       continue;
@@ -96,7 +107,9 @@ async function chat(spec, tools, question) {
     function: { name: t.name + SUFFIX, description: t.description, parameters: t.inputSchema } }));
   const web = { type: "function", function: { name: "web_search", description: "Search the web for current information.",
     parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } };
+  const only = process.env.ONLY ? process.env.ONLY.split(",") : null;   // e.g. ONLY=fastegy-strong
   for (const name of ["fastegy-strong", "fastegy-fast"]) {
+    if (only && !only.includes(name)) continue;
     const spec = cfg.specs[name];
     if (!spec) continue;
     const tools = spec.webSearch ? [...mcp, web] : mcp;
@@ -116,4 +129,4 @@ JS
 )
 
 CONF="$CONF" python3 -c 'import json,os,sys; print(json.dumps({"conf": json.loads(os.environ["CONF"]), "questions": sys.argv[1:]}))' "${QUESTIONS[@]}" |
-  docker exec -i "$LC" node -e "$JS"
+  docker exec -i -e ONLY="${ONLY:-}" "$LC" node -e "$JS"
