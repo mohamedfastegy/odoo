@@ -10,7 +10,8 @@
 # Run    : bash chat_test.sh                      (the three standard questions)
 #          bash chat_test.sh "سؤال 1" "سؤال 2"    (your own questions)
 #          ONLY=fastegy-strong bash chat_test.sh   (one option only)
-# Version: 1.2 — 2026-10-08 (web search passes up to 12000 characters per page; 3000 cut datasheets short)
+#          TEMP=0.2 bash chat_test.sh              (try a temperature without changing the config)
+# Version: 1.3 — 2026-10-08 (TEMP=; 1.2: web search passes up to 12000 characters per page)
 # =============================================================================
 set -euo pipefail
 
@@ -76,7 +77,8 @@ async function chat(spec, tools, question) {
   const trace = [];
   for (let round = 0; round < 6; round++) {
     const body = { model: spec.model, messages, tools, max_tokens: 2000 };
-    if (spec.temperature != null) body.temperature = spec.temperature;
+    const temp = process.env.TEMP ? Number(process.env.TEMP) : spec.temperature;   // TEMP= tries a temperature
+    if (temp != null) body.temperature = temp;
     const r = await fetch(cfg.baseURL.replace(/\/$/, "") + "/chat/completions", { method: "POST",
       headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const fb = r.headers.get("x-litellm-attempted-fallbacks");
@@ -129,4 +131,4 @@ JS
 )
 
 CONF="$CONF" python3 -c 'import json,os,sys; print(json.dumps({"conf": json.loads(os.environ["CONF"]), "questions": sys.argv[1:]}))' "${QUESTIONS[@]}" |
-  docker exec -i -e ONLY="${ONLY:-}" "$LC" node -e "$JS"
+  docker exec -i -e ONLY="${ONLY:-}" -e TEMP="${TEMP:-}" "$LC" node -e "$JS"
