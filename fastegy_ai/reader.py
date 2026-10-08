@@ -13,10 +13,11 @@ GET /search?...
 POST /mcp
     Minimal MCP server (streamable HTTP, JSON responses) exposing the product catalog to
     LibreChat: lookup_product(code) and search_catalog(keywords). See products.py.
-    Two sources: the Hikvision brochure (CATALOG_PATH) and FastEgy's own product list from
-    Odoo (CARRIED_PATH, optional, built by kb/odoo_products.py). Both reload when replaced.
+    Sources: the Hikvision brochure (CATALOG_PATH), FastEgy's own product list from Odoo
+    (CARRIED_PATH, built by kb/odoo_products.py) and the official datasheets collected at night
+    (DATASHEETS_PATH, kb/ds_collect.py). Each reloads when its file is replaced.
 
-Version 4 — 2026-10-08
+Version 5 — 2026-10-08 (MCP serverInfo still says "4": the kb_2 update test checks it)
 """
 import ipaddress
 import json
@@ -40,6 +41,7 @@ SEARXNG = os.environ.get("SEARXNG_UPSTREAM", "http://searxng:8080/search")
 ENGINES = os.environ.get("SEARCH_ENGINES", "yahoo,startpage,yandex")
 CATALOG_PATH = os.environ.get("CATALOG_PATH", "/app/catalog.json")
 CARRIED_PATH = os.environ.get("CARRIED_PATH", "/app/carried.json")
+DATASHEETS_PATH = os.environ.get("DATASHEETS_PATH", "/app/data/ds/datasheets.json")
 MCP_KEY = os.environ.get("MCP_KEY", "")
 MAX_BYTES = 3_000_000
 MAX_PDF_BYTES = 15_000_000
@@ -108,9 +110,10 @@ _catalog = {"mtime": None, "obj": None}
 
 def catalog():
     """Load the catalog files, reloading when one of them changes (no restart needed)."""
-    mtime = tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in (CATALOG_PATH, CARRIED_PATH))
+    paths = (CATALOG_PATH, CARRIED_PATH, DATASHEETS_PATH)
+    mtime = tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in paths)
     if _catalog["mtime"] != mtime:
-        _catalog["obj"], _catalog["mtime"] = products.Catalog(CATALOG_PATH, CARRIED_PATH), mtime
+        _catalog["obj"], _catalog["mtime"] = products.Catalog(*paths), mtime
     return _catalog["obj"]
 
 

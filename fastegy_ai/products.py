@@ -133,7 +133,7 @@ def variant_bases(code):
 
 
 class Catalog:
-    def __init__(self, path, carried_path=None):
+    def __init__(self, path, carried_path=None, datasheets_path=None):
         data = json.load(open(path, encoding="utf-8"))
         self.source = data.get("meta", {}).get("source", "catalog")
         self.products = data["products"]
@@ -152,6 +152,12 @@ class Catalog:
             self.carried_source = data.get("meta", {}).get("source", "FastEgy product list")
             self.carried = data["models"]
             self.carried_index = {norm(m["code"]): m for m in self.carried}
+        # official datasheets collected at night by kb/ds_collect.py, optional
+        self.datasheets = {}
+        if datasheets_path and os.path.exists(datasheets_path):
+            for r in json.load(open(datasheets_path, encoding="utf-8")).get("datasheets", []):
+                if r.get("status") == "found":
+                    self.datasheets[norm(r["code"])] = r
 
     # ------------------------------------------------------------- formatting
     def describe(self, p, matched=None):
@@ -264,10 +270,19 @@ class Catalog:
             tags = [x for x in [m.get("category"), *m.get("tags", [])] if x]
             if tags:
                 lines.append("Category / tags: " + ", ".join(tags))
+            ds = self.datasheets.get(norm(m["code"]))
             if m.get("ar"):
                 lines.append("FastEgy description (Arabic, written by FastEgy): " + m["ar"])
+            elif ds:
+                lines.append("FastEgy description: none in Odoo; the official datasheet below is the source.")
             else:
                 lines.append("FastEgy description: none in Odoo, so only the tags above are known.")
+            if ds:
+                lines.append(f"Official Hikvision datasheet for {m['code']} (read automatically from {ds['url']}):")
+                lines.append("  " + ds.get("title", m["code"]))
+                if ds.get("features"):
+                    lines.append("  Key features: " + "; ".join(ds["features"][:8]))
+                lines.append("  Specification:\n" + "\n".join("    " + x for x in ds["spec"][:3000].split("\n")))
             lines.append("The list says nothing about stock or price: do not claim either.")
             return "exact", "\n".join(lines)
         related = []
@@ -315,13 +330,18 @@ class Catalog:
 
         out = []
         if self.carried is not None:
+            def ds_line(m):
+                ds = self.datasheets.get(norm(m["code"]))
+                return (ds["title"] + "; " + "; ".join(ds.get("features", [])[:4])) if ds else ""
             top, rows = best(self.carried, lambda m: " ".join(
-                [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or ""]))
+                [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or "", ds_line(m)]))
             if rows:
                 out.append(f"FastEgy product list: {len(rows)} models matching '{text}' ({top}/{len(terms)} keywords):")
                 for sc, m in rows:
+                    desc = m.get("ar") or (f"none in Odoo; official datasheet: {ds_line(m)}" if ds_line(m)
+                                           else "none in Odoo (only the tags are known)")
                     out.append(f"- {m['code']} | tags: {', '.join(m.get('tags', []))} | FastEgy description: "
-                               f"{m.get('ar') or 'none in Odoo (only the tags are known)'}{mark(sc, top)}")
+                               f"{desc}{mark(sc, top)}")
         top, rows = best(self.products, lambda p: " ".join(
             [*p["codes"], *(p.get("labels") or []), p.get("category") or "", p.get("series") or "",
              *p["specs"]]))
