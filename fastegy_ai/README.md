@@ -340,5 +340,4 @@ cat /root/litellm/config.yaml.bak.20261008_033054 > /root/litellm/config.yaml &&
 cat /root/librechat/librechat.yaml.bak.20261008_033234 > /root/librechat/librechat.yaml && docker restart librechat
 ```
 
-ولو احتجت ترجع خدمة القراءة للنسخة التالتة، شغّل تاني الجزء الخاص بيها من
-`kb_1_catalog.sh`.
+خدمة القراءة الرابعة شغالة مع الإعدادات القديمة كمان، فمش محتاج ترجّعها للتالتة.
