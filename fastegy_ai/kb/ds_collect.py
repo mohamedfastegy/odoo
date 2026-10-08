@@ -9,15 +9,22 @@ lookup_product. Progress is saved after every model, so the job can stop and res
 
 The search engines are the ones the assistant's web search uses, and SearXNG suspends an engine
 for up to 24 hours after a CAPTCHA, "too many requests" or "access denied". So the job stops as
-soon as any engine reports one of those, and the assistant keeps the engines that still answer.
+soon as an engine reports one of those, and the assistant keeps the engines that still answer.
+Engines already blocked when the job starts (startpage sits behind a permanent bot wall) are not
+the job's doing; they are ignored. A search with no results at all is retried later, not recorded
+as "no datasheet".
 
 Usage:
   python /app/ds_collect.py --carried /data/carried.json --out /data/ds/datasheets.json
          [--all] [--limit N] [--now] [--start 22] [--stop 7] [--sleep 45] [--day-sleep 60]
-  --now        ignore the night window (for a short test with --limit)
-  --day-sleep  also work outside the night window, this many seconds between searches
+         [--ignore-blocked startpage]
+  --now             ignore the night window (for a short test with --limit)
+  --day-sleep       also work outside the night window, this many seconds between searches
+  --ignore-blocked  engines known to be blocked already (comma list); without it, the engines
+                    blocked at the job's first search
 
-Version 1.1 — 2026-10-08: stops on an engine block; optional daytime pace.
+Version 1.2 — 2026-10-08: stops on a new engine block (ignores engines blocked before it started);
+              optional daytime pace; an empty search is an error, retried later.
 """
 import argparse
 import datetime
@@ -87,8 +94,9 @@ def search(code):
 
 
 def blocks(reply):
-    """The engines that report a block ("CAPTCHA", "Suspended: too many requests", ...), not timeouts."""
-    return [f"{e[0]}: {e[1]}" for e in reply.get("unresponsive_engines") or []
+    """(engine, reason) for engines that report a block ("CAPTCHA", "Suspended: too many requests", ...),
+    not timeouts."""
+    return [(e[0], e[1]) for e in reply.get("unresponsive_engines") or []
             if isinstance(e, list) and len(e) == 2 and any(word in str(e[1]).lower() for word in BLOCK)]
 
 
@@ -162,6 +170,8 @@ def main():
     ap.add_argument("--sleep", type=float, default=45, help="seconds between searches")
     ap.add_argument("--day-sleep", type=float, default=0,
                     help="also work outside the window, this many seconds between searches (0: wait)")
+    ap.add_argument("--ignore-blocked", default=None,
+                    help="engines already blocked, comma list (default: those blocked at the first search)")
     a = ap.parse_args()
 
     models = json.load(open(a.carried, encoding="utf-8"))["models"]
@@ -175,6 +185,9 @@ def main():
     print(f"{len(todo)} models to check; {sum(r['status'] == 'found' for r in records.values())} datasheets already kept",
           flush=True)
     errors, blocked = 0, []
+    known = None if a.ignore_blocked is None else {e.strip() for e in a.ignore_blocked.split(",") if e.strip()}
+    if known:
+        print(f"already blocked before this run, ignored: {', '.join(sorted(known))}", flush=True)
     for n, code in enumerate(todo, 1):
         while not a.now and not a.day_sleep and not in_window(a.start, a.stop):
             print(f"outside {a.start}:00-{a.stop}:00 Cairo; waiting", flush=True)
@@ -183,7 +196,14 @@ def main():
         try:
             reply = search(code)
             blocked = blocks(reply)
-            rec = collect(code, reply.get("results", []))
+            if known is None:                     # blocked before this run: not the job's doing
+                known = {engine for engine, _ in blocked}
+                if known:
+                    print(f"already blocked before this run, ignored: {', '.join(sorted(known))}", flush=True)
+            blocked = [(engine, why) for engine, why in blocked if engine not in known]
+            if not reply.get("results"):          # every engine failed: try this model again later
+                raise RuntimeError(f"no search results; engines: {reply.get('unresponsive_engines')}")
+            rec = collect(code, reply["results"])
             errors = 0
         except Exception as e:                    # search down or blocked: keep going, slower
             rec = {"code": code, "status": "error", "error": str(e)[:200]}
@@ -194,7 +214,7 @@ def main():
             save(a.out, list(records.values()))
         print(f"[{n}/{len(todo)}] {code}: {rec['status']} {rec.get('url', '')}", flush=True)
         if blocked:
-            print(f"STOPPED: {'; '.join(blocked)}. Stopped so the assistant's web search keeps its other engines;"
+            print(f"STOPPED: {'; '.join(f'{e}: {why}' for e, why in blocked)}. Stopped so the assistant's web search keeps its other engines;"
                   " start the job again later and it resumes here.", flush=True)
             break
         if errors >= 5:
