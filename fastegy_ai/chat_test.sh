@@ -10,7 +10,7 @@
 # Run    : bash chat_test.sh                      (the three standard questions)
 #          bash chat_test.sh "سؤال 1" "سؤال 2"    (your own questions)
 #          ONLY=fastegy-strong bash chat_test.sh   (one option only)
-# Version: 1.1 — 2026-10-08 (web search now reads the top pages, as LibreChat does)
+# Version: 1.2 — 2026-10-08 (web search passes up to 12000 characters per page; 3000 cut datasheets short)
 # =============================================================================
 set -euo pipefail
 
@@ -62,7 +62,7 @@ async function runTool(name, args) {
         const r = await (await fetch(READER + "/v2/scrape", { method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + MKEY },
           body: JSON.stringify({ url: x.url, timeout: 15000 }) })).json();
-        return { title: x.title, url: x.url, content: r.success ? r.data.markdown.slice(0, 3000) : (x.content || "") };
+        return { title: x.title, url: x.url, content: r.success ? r.data.markdown.slice(0, 12000) : (x.content || "") };
       } catch (e) { return { title: x.title, url: x.url, content: x.content || "" }; }
     }));
     return JSON.stringify(pages) + "\nsources read: " + top.map(x => x.url).join(" ");
