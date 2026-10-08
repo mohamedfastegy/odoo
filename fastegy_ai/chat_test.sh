@@ -92,7 +92,7 @@ async function chat(spec, tools, question) {
         const out = await runTool(tc.function.name, args);
         const first = tc.function.name === "web_search" ? out.split("\n").pop() : out.split("\n")[0];
         trace.push(tc.function.name.replace(SUFFIX, "") + " " + JSON.stringify(args) + "  ->  " + first.slice(0, 160));
-        messages.push({ role: "tool", tool_call_id: tc.id, content: out.slice(0, 12000) });
+        messages.push({ role: "tool", tool_call_id: tc.id, content: out.slice(0, 40000) });
       }
       continue;
     }
