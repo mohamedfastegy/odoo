@@ -323,3 +323,22 @@ cd /root && curl -fsSL https://raw.githubusercontent.com/mohamedfastegy/odoo/cla
 لتحديث القائمة بعد كده: صدّر ملف جديد من
 Odoo
 بنفس الأعمدة، وشغّل نفس الأمر بالملف الجديد. المرة دي بيبدّل القائمة بس، من غير إعادة تشغيل.
+
+### 8 أكتوبر 2026: اتركّب
+
+| السكريبت | النتيجة | النسخة الاحتياطية |
+|---|---|---|
+| `fw_1_docker_ports.sh` | المنافذ اتقفلت، والدومينات بتردّ زي ما كانت | `/etc/ufw/after.rules.bak.20261008_031143` |
+| `fix_4_fallback.sh` (1.1) | الاحتياطي بقى يشتغل بالأدوات، وتحويل الأخطاء اشتغل | `/root/litellm/config.yaml.bak.20261008_033054` |
+| `kb_2_odoo.sh` | 1099 موديل، والذاكرة القديمة اتمسحت | `/root/librechat/librechat.yaml.bak.20261008_033234` |
+
+الرجوع:
+
+```bash
+cat /etc/ufw/after.rules.bak.20261008_031143 > /etc/ufw/after.rules && ufw reload
+cat /root/litellm/config.yaml.bak.20261008_033054 > /root/litellm/config.yaml && rm /root/litellm/docker-compose.override.yml /root/litellm/fastegy_litellm_patch.py && docker restart litellm
+cat /root/librechat/librechat.yaml.bak.20261008_033234 > /root/librechat/librechat.yaml && docker restart librechat
+```
+
+ولو احتجت ترجع خدمة القراءة للنسخة التالتة، شغّل تاني الجزء الخاص بيها من
+`kb_1_catalog.sh`.
