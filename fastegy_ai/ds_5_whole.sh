@@ -12,9 +12,10 @@
 #   - products.py v4.8: up to 4500 characters, then the version, power and size
 #     lines from the rest, and a note that the rest was cut. Rebuilds
 #     fastegy-reader:4 (previous image kept as fastegy-reader:4-prev).
-#   - collector v1.4 (stores up to 12000) and kb/ds_relayout.py, which re-reads
-#     those datasheets from their saved links, no searching: tables with layout
-#     extraction ("Label | Value"), cut ones in full. A record changes only
+#   - collector v1.4 (stores up to 12000; drops internal SKU lists written in
+#     Chinese) and kb/ds_relayout.py, which re-reads those datasheets from their
+#     saved links, no searching: tables with layout extraction ("Label | Value"),
+#     cut ones in full, SKU-list ones without the lists. A record changes only
 #     when the re-read is clearly better and names the exact code.
 # Any failure puts the previous reader or the previous datasheets file back.
 # Run    : bash ds_5_whole.sh
@@ -22,7 +23,7 @@
 # =============================================================================
 set -euo pipefail
 
-SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/0bb8ab695b57e38a10562a7a29e5eec0c53f083d/fastegy_ai
+SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/6d51bc0c74f21ca2cde31619e94796eef3e34cb0/fastegy_ai
 LC=librechat
 RD=fastegy-reader
 JOB=fastegy-datasheets
@@ -50,8 +51,8 @@ curl -fsSL "$SRC/kb/ds_collect.py" -o "$STAGE/ds_collect.py"
 curl -fsSL "$SRC/kb/ds_relayout.py" -o "$STAGE/ds_relayout.py"
 (cd "$STAGE" && sha256sum -c --quiet) <<'SUMS' || { echo "Downloaded files do not match; nothing changed."; exit 1; }
 acde93b9386a6e9278fd7c9158c27d4c4b8fe7a8c2ff8dcbec435109036549ae  products.py
-f4960aed557b966b7ab5ffe304f893b6c551383b61ba1e251c5887701219919a  ds_collect.py
-90ec393b39642f958d8f26bbee6d65b02185f76ebe598e5b5292c05fe3af6c5e  ds_relayout.py
+5a8d54cd27ba470dc3fd2e2a0ec0444a03b2e68ef66f86b3c3ffba0a88749b87  ds_collect.py
+b98116a5157a0a772f918e80d8770472b2a41e58a2da9027439fc2cc0526d2be  ds_relayout.py
 SUMS
 echo "products.py v4.8, collector v1.4 and ds_relayout downloaded and verified"
 
