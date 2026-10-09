@@ -20,6 +20,8 @@ Usage (inside the fastegy-reader image, data mounted at /data):
   python /app/ds_relayout.py --probe CODE [CODE ...]    read-only: old vs new for these codes
   python /app/ds_relayout.py --list                     read-only: the records that would be re-read
   python /app/ds_relayout.py --apply                    re-read them and keep the better ones
+Version 1.4 — 2026-10-09: a saved link that fails is replaced by another official link from a new
+              search; a re-read that turns out to be an SKU export is not kept.
 Version 1.3 — 2026-10-09: a pause between downloads (--pause, 5 s): run without it, Hikvision's site
               answered 7 of 86 quick downloads with an HTML page; "cut" means exactly 6000.
 Version 1.2 — 2026-10-09: SKU exports are searched again or hidden (1.1 left other SKUs' values
@@ -125,9 +127,9 @@ def research(rec):
             "no ordinary datasheet: hidden, so the assistant does not mix up the SKUs' values")
 
 
-def reread(rec, how):
+def reread(rec, how, other_link=False):
     """(re-read record or None, keep it?, why). how: "table" (layout read), "cut" (normal read, longer)
-    or "sku" (search again)."""
+    or "sku" (search again). other_link: rec["url"] is a new link for the same model (see elsewhere())."""
     if how == "sku":
         return research(rec)
     text = layout_text(rec["url"]) if how == "table" else ds_collect.pdf_text(rec["url"])
@@ -145,19 +147,37 @@ def reread(rec, how):
     old_spec, new_spec = rec.get("spec", ""), found["spec"]
     if not new_spec.strip():
         return new_rec, False, "the re-read has no Specification section"
+    if ds_collect.sku_export(new_spec):
+        return new_rec, False, "the re-read is an internal SKU export"
+    same_start = other_link or new_spec.split("\n")[0] == old_spec.split("\n")[0]
     if how == "table":
         old, new = short_share(old_spec), short_share(new_spec)
         if new > old - 0.10:
             return new_rec, False, f"not clearly better (short lines {old:.2f} -> {new:.2f})"
         return new_rec, True, f"table rows kept together (short lines {old:.2f} -> {new:.2f})"
     if how == "features":
-        if not new_rec["features"] or new_spec.split("\n")[0] != old_spec.split("\n")[0] \
-                or len(new_spec) < 0.95 * len(old_spec):
+        if not new_rec["features"] or not same_start or len(new_spec) < 0.95 * len(old_spec):
             return new_rec, False, "no key features read, or the specification came out different"
         return new_rec, True, f"{len(new_rec['features'])} key features read (they were empty)"
-    if len(new_spec) <= len(old_spec) or new_spec.split("\n")[0] != old_spec.split("\n")[0]:
+    if len(new_spec) <= len(old_spec) or not same_start:
         return new_rec, False, f"not longer or starts differently ({len(old_spec)} -> {len(new_spec)} chars)"
     return new_rec, True, f"no longer cut ({len(old_spec)} -> {len(new_spec)} chars)"
+
+
+def elsewhere(rec, how):
+    """The saved link no longer gives the PDF (www.hikvision.com answers some with an HTML page): search
+    again and re-read from the first other official link that works."""
+    results = ds_collect.search(rec["code"]).get("results", [])
+    for url in ds_collect.candidates(rec["code"], results)[:4]:
+        if url == rec["url"]:
+            continue
+        try:
+            new, keep, why = reread({**rec, "url": url}, how, other_link=True)
+        except Exception:                         # this one fails too: try the next
+            continue
+        if new is not None:
+            return new, keep, f"{why}; from another link: {url}"
+    return None, False, "the saved link fails and no other link worked"
 
 
 def main():
@@ -206,10 +226,15 @@ def main():
         return
     changed = 0
     for n, rec in enumerate(todo, 1):
+        how = kind(rec, a.min_short)
         try:
-            new, keep, why = reread(rec, kind(rec, a.min_short))
-        except Exception as e:                    # a broken or blocked PDF: keep the stored record
-            new, keep, why = None, False, f"error: {str(e)[:80]}"
+            new, keep, why = reread(rec, how)
+        except Exception as e:                    # the saved link fails: try another one
+            try:
+                new, keep, why = elsewhere(rec, how)
+                time.sleep(10)                    # it searched: go easy on the search engines
+            except Exception as e2:
+                new, keep, why = None, False, f"error: {str(e)[:60]}; search: {str(e2)[:60]}"
         if keep:
             by_code[rec["code"]] = new
             changed += 1
