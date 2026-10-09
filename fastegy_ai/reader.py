@@ -17,12 +17,34 @@ POST /mcp
     (CARRIED_PATH, built by kb/odoo_products.py) and the official datasheets collected at night
     (DATASHEETS_PATH, kb/ds_collect.py). Each reloads when its file is replaced.
 
-Version 5 — 2026-10-08 (MCP serverInfo still says "4": the kb_2 update test checks it)
+/brain/... (only when BRAIN_KEY is set; Caddy publishes this path, and only this path, on
+    https://ai.fastegy.net/brain/) — the link for FastEgy's Odoo modules, so they always use the
+    assistant exactly as it is configured here:
+    GET  /brain/health                 no key: {"ok": true, "brain": true|false}
+    GET  /brain/manifest               the rules (promptPrefix) and model of each FastEgy model spec in
+                                       librechat.yaml (plus data/brain/specs.json if present), the
+                                       catalog tools, and a version that changes whenever one of them,
+                                       the product list or the datasheets change. Sends an ETag and
+                                       answers 304 to If-None-Match when nothing changed.
+    POST /brain/v1/chat/completions    OpenAI-style chat, passed to LiteLLM with this server's key.
+                                       Only the spec models; no streaming; max_tokens capped; LiteLLM's
+                                       fallback model is skipped (BRAIN_NO_FALLBACK=1, the default) so
+                                       Odoo data never reaches the free fallback tier.
+    POST /brain/tool                   {"name": "lookup_product"|"search_catalog", "arguments": {...}}
+    Every /brain answer carries X-Brain-Version. Requests need "Authorization: Bearer <BRAIN_KEY>";
+    BRAIN_RATE requests a minute at most. librechat.yaml is read again whenever it changes.
+
+Version 6 — 2026-10-09 (MCP serverInfo still says "4": the kb_2 update test checks it)
 """
+import datetime
+import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import socket
+import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,6 +57,11 @@ from pypdf import PdfReader
 
 import products
 
+try:
+    import yaml
+except ImportError:              # the brain stays off without PyYAML
+    yaml = None
+
 KEY = os.environ.get("READER_KEY", "")
 MAX_CHARS = int(os.environ.get("READER_MAX_CHARS", "20000"))
 SEARXNG = os.environ.get("SEARXNG_UPSTREAM", "http://searxng:8080/search")
@@ -43,6 +70,18 @@ CATALOG_PATH = os.environ.get("CATALOG_PATH", "/app/catalog.json")
 CARRIED_PATH = os.environ.get("CARRIED_PATH", "/app/carried.json")
 DATASHEETS_PATH = os.environ.get("DATASHEETS_PATH", "/app/data/ds/datasheets.json")
 MCP_KEY = os.environ.get("MCP_KEY", "")
+BRAIN_KEY = os.environ.get("BRAIN_KEY", "")
+LC_CONFIG = os.environ.get("LC_CONFIG", "/app/librechat.yaml")
+BRAIN_SPECS_FILE = os.environ.get("BRAIN_SPECS_FILE", "/app/data/brain/specs.json")
+BRAIN_SPECS = [s.strip() for s in os.environ.get("BRAIN_SPECS", "fastegy-strong,fastegy-fast").split(",") if s.strip()]
+BRAIN_ENDPOINT = os.environ.get("BRAIN_ENDPOINT", "FastEgy AI")   # the librechat.yaml endpoint that holds the LiteLLM URL
+LLM_BASE = os.environ.get("LLM_BASE", "")                          # empty: that endpoint's baseURL
+LLM_KEY = os.environ.get("LLM_KEY", "")
+BRAIN_NO_FALLBACK = os.environ.get("BRAIN_NO_FALLBACK", "1") == "1"
+BRAIN_MAX_TOKENS = int(os.environ.get("BRAIN_MAX_TOKENS", "4000"))
+BRAIN_RATE = int(os.environ.get("BRAIN_RATE", "60"))              # requests a minute, all callers together
+BRAIN_TIMEOUT = int(os.environ.get("BRAIN_TIMEOUT", "120"))
+BRAIN_MAX_BODY = 2_000_000
 MAX_BYTES = 3_000_000
 MAX_PDF_BYTES = 15_000_000
 MAX_PDF_PAGES = 12          # datasheets are 3-8 pages; brochures are cut to the first pages
@@ -169,6 +208,135 @@ def mcp_dispatch(msg):
     return {"jsonrpc": "2.0", "id": mid, "result": result}
 
 
+# ---------------------------------------------------------------- brain: the link for Odoo
+_brain = {"key": None, "manifest": None, "llm": None}
+_brain_lock = threading.Lock()
+_rate = {"window": [], "lock": threading.Lock()}
+CHAT_FIELDS = ("model", "messages", "tools", "tool_choice", "temperature", "max_tokens", "top_p",
+               "stop", "seed", "response_format", "parallel_tool_calls")
+
+
+def _stamp(path):
+    try:
+        st = os.stat(path)
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
+def _iso(ns):
+    return datetime.datetime.fromtimestamp(ns / 1e9, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def build_manifest():
+    """(manifest, llm) from librechat.yaml, data/brain/specs.json and the catalog files."""
+    if yaml is None:
+        raise RuntimeError("PyYAML is missing")
+    with open(LC_CONFIG, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
+    eps = [e for e in ((cfg.get("endpoints") or {}).get("custom") or []) if e.get("name") == BRAIN_ENDPOINT]
+    base = (LLM_BASE or (eps[0].get("baseURL") if eps else "") or "").rstrip("/")
+    specs = {}
+    for s in ((cfg.get("modelSpecs") or {}).get("list") or []):
+        if s.get("name") not in BRAIN_SPECS:
+            continue
+        p = s.get("preset") or {}
+        specs[s["name"]] = {"label": s.get("label") or s["name"], "model": p.get("model"),
+                            "temperature": p.get("temperature"), "rules": p.get("promptPrefix") or "",
+                            "web_search": bool(s.get("webSearch")), "source": "librechat"}
+    if os.path.exists(BRAIN_SPECS_FILE):        # extra specs kept on this server (e.g. a customer persona)
+        with open(BRAIN_SPECS_FILE, encoding="utf-8") as f:
+            for name, s in (json.load(f) or {}).items():
+                if name not in specs and isinstance(s, dict) and s.get("model"):
+                    specs[name] = {"label": s.get("label") or name, "model": s["model"],
+                                   "temperature": s.get("temperature"), "rules": s.get("rules") or "",
+                                   "web_search": False, "source": "brain"}
+    if not specs:
+        raise RuntimeError("no FastEgy model spec found in " + LC_CONFIG)
+    tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                               "parameters": t["inputSchema"]}} for t in MCP_TOOLS]
+    stamps = {"product_list": _stamp(CARRIED_PATH), "datasheets": _stamp(DATASHEETS_PATH),
+              "brochure": _stamp(CATALOG_PATH)}
+    body = {"specs": specs, "default_spec": next((n for n in BRAIN_SPECS if n in specs), next(iter(specs))),
+            "tools": tools, "models": sorted({s["model"] for s in specs.values() if s.get("model")}),
+            "catalog": {k: (_iso(v[0]) if v else None) for k, v in stamps.items()}, "reader_version": "6"}
+    version = hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
+    changed = [x[0] for x in [_stamp(LC_CONFIG), _stamp(BRAIN_SPECS_FILE)] + list(stamps.values()) if x]
+    manifest = dict(body, version=version, updated_at=_iso(max(changed)))
+    return manifest, {"base": base, "models": set(body["models"])}
+
+
+def brain_state():
+    """The manifest, rebuilt when librechat.yaml, specs.json or a catalog file changes. A file
+    caught half-written keeps the previous manifest until the next request."""
+    key = tuple(_stamp(p) for p in (LC_CONFIG, BRAIN_SPECS_FILE, CATALOG_PATH, CARRIED_PATH, DATASHEETS_PATH))
+    with _brain_lock:
+        if _brain["key"] != key:
+            try:
+                _brain["manifest"], _brain["llm"] = build_manifest()
+                _brain["key"] = key
+            except Exception:
+                if _brain["manifest"] is None:
+                    raise
+        return _brain["manifest"], _brain["llm"]
+
+
+def brain_allowed(headers):
+    got = headers.get("Authorization", "")
+    return bool(BRAIN_KEY) and hmac.compare_digest(got.encode(), ("Bearer " + BRAIN_KEY).encode())
+
+
+def brain_rate_ok():
+    now = time.monotonic()
+    with _rate["lock"]:
+        _rate["window"] = [t for t in _rate["window"] if now - t < 60]
+        if len(_rate["window"]) >= BRAIN_RATE:
+            return False
+        _rate["window"].append(now)
+        return True
+
+
+def brain_chat(body):
+    """Pass one chat request to LiteLLM: (status, json bytes, fallbacks header, model)."""
+    manifest, llm = brain_state()
+    model = body.get("model") or manifest["specs"][manifest["default_spec"]]["model"]
+    if model not in llm["models"]:
+        return 400, json.dumps({"error": {"message": "model not allowed: %s" % model}}).encode(), None, model
+    if not llm["base"] or not LLM_KEY:
+        return 503, json.dumps({"error": {"message": "the model server is not configured"}}).encode(), None, model
+    out = {k: body[k] for k in CHAT_FIELDS if k in body}
+    out["model"], out["stream"] = model, False
+    try:
+        out["max_tokens"] = max(1, min(int(out.get("max_tokens") or 2000), BRAIN_MAX_TOKENS))
+    except (TypeError, ValueError):
+        out["max_tokens"] = 2000
+    if BRAIN_NO_FALLBACK:
+        out["disable_fallbacks"] = True
+    req = urllib.request.Request(llm["base"] + "/chat/completions", data=json.dumps(out).encode(), method="POST",
+                                 headers={"Authorization": "Bearer " + LLM_KEY, "Content-Type": "application/json"})
+    try:
+        with UPSTREAM.open(req, timeout=BRAIN_TIMEOUT) as r:
+            return r.status, r.read(), r.headers.get("x-litellm-attempted-fallbacks"), model
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), None, model
+    except Exception as e:  # model server down or too slow
+        return 502, json.dumps({"error": {"message": "model server: " + str(e)[:200]}}).encode(), None, model
+
+
+def brain_tool(body):
+    name, args = body.get("name"), body.get("arguments") or {}
+    if name == "lookup_product":
+        return catalog().lookup(str(args.get("code", "")))
+    if name == "search_catalog":
+        return catalog().search(str(args.get("keywords", "")))
+    return None
+
+
+def brain_log(path, status, started, model=""):
+    print(json.dumps({"brain": path, "status": status, "ms": int((time.monotonic() - started) * 1000),
+                      "model": model}), flush=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, obj):
         self._raw(code, json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8")
@@ -184,6 +352,8 @@ class Handler(BaseHTTPRequestHandler):
         p = urlparse(self.path)
         if p.path == "/health":
             return self._send(200, {"ok": True})
+        if p.path.startswith("/brain/"):
+            return self.handle_brain_get(p.path.rstrip("/"))
         if p.path.rstrip("/") == "/mcp":              # no server-initiated stream
             self.send_response(405)
             self.send_header("Allow", "POST")
@@ -212,6 +382,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.rstrip("/") == "/mcp":
             return self.handle_mcp()
+        if self.path.startswith("/brain/"):
+            return self.handle_brain_post(urlparse(self.path).path.rstrip("/"))
         if self.path.rstrip("/") not in ("/v1/scrape", "/v2/scrape"):
             return self._send(404, {"success": False, "error": "not found"})
         if KEY and self.headers.get("Authorization", "") != "Bearer " + KEY:
@@ -229,6 +401,80 @@ class Handler(BaseHTTPRequestHandler):
                 "title": title, "sourceURL": url, "url": final, "statusCode": status}}})
         except Exception as e:  # report every failure to the caller as a failed scrape
             self._send(200, {"success": False, "error": str(e)[:300]})
+
+    def _brain_send(self, code, body, version="", extra=None):
+        data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        if version:
+            self.send_header("X-Brain-Version", version)
+            self.send_header("ETag", '"%s"' % version)
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def handle_brain_get(self, path):
+        started = time.monotonic()
+        if path == "/brain/health":
+            return self._brain_send(200, {"ok": True, "brain": bool(BRAIN_KEY) and yaml is not None})
+        if not brain_allowed(self.headers):
+            brain_log(path, 401, started)
+            return self._brain_send(401, {"ok": False, "error": "unauthorized"})
+        if path != "/brain/manifest":
+            return self._brain_send(404, {"ok": False, "error": "not found"})
+        try:
+            manifest, _ = brain_state()
+        except Exception as e:
+            brain_log(path, 503, started)
+            return self._brain_send(503, {"ok": False, "error": "manifest: " + str(e)[:200]})
+        version = manifest["version"]
+        if self.headers.get("If-None-Match", "").strip('"') == version:
+            self.send_response(304)
+            self.send_header("ETag", '"%s"' % version)
+            self.send_header("X-Brain-Version", version)
+            self.end_headers()
+            return brain_log(path, 304, started)
+        brain_log(path, 200, started)
+        return self._brain_send(200, manifest, version)
+
+    def handle_brain_post(self, path):
+        started = time.monotonic()
+        if not brain_allowed(self.headers):
+            brain_log(path, 401, started)
+            return self._brain_send(401, {"ok": False, "error": "unauthorized"})
+        if path not in ("/brain/v1/chat/completions", "/brain/tool"):
+            return self._brain_send(404, {"ok": False, "error": "not found"})
+        if not brain_rate_ok():
+            brain_log(path, 429, started)
+            return self._brain_send(429, {"ok": False, "error": "too many requests"}, extra={"Retry-After": "10"})
+        size = int(self.headers.get("Content-Length") or 0)
+        if size > BRAIN_MAX_BODY:
+            return self._brain_send(413, {"ok": False, "error": "request too large"})
+        try:
+            body = json.loads(self.rfile.read(size) or b"{}")
+            assert isinstance(body, dict)
+            manifest, _ = brain_state()
+        except Exception as e:
+            brain_log(path, 400, started)
+            return self._brain_send(400, {"ok": False, "error": "bad request: " + str(e)[:120]})
+        version = manifest["version"]
+        if path == "/brain/tool":
+            try:
+                text = brain_tool(body)
+            except Exception as e:  # the model gets the failure as the tool result
+                text = "catalog error: " + str(e)[:200]
+            if text is None:
+                brain_log(path, 404, started)
+                return self._brain_send(404, {"ok": False, "error": "unknown tool"}, version)
+            brain_log(path, 200, started, body.get("name", ""))
+            return self._brain_send(200, {"ok": True, "text": text}, version)
+        code, data, fallbacks, model = brain_chat(body)
+        brain_log(path, code, started, model)
+        return self._brain_send(code, data, version,
+                                {"X-Brain-Fallbacks": fallbacks} if fallbacks else None)
 
     def handle_mcp(self):
         if MCP_KEY and self.headers.get("Authorization", "") != "Bearer " + MCP_KEY:
