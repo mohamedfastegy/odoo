@@ -12,18 +12,19 @@
 #   - products.py v4.8: up to 4500 characters, then the version, power and size
 #     lines from the rest, and a note that the rest was cut. Rebuilds
 #     fastegy-reader:4 (previous image kept as fastegy-reader:4-prev).
-#   - collector v1.4 (stores up to 12000; drops internal SKU lists written in
-#     Chinese) and kb/ds_relayout.py, which re-reads those datasheets from their
-#     saved links, no searching: tables with layout extraction ("Label | Value"),
-#     cut ones in full, SKU-list ones without the lists. A record changes only
-#     when the re-read is clearly better and names the exact code.
+#   - collector v1.4 (stores up to 12000; skips internal SKU exports) and
+#     kb/ds_relayout.py, which re-reads those datasheets from their
+#     saved links: tables with layout extraction ("Label | Value"), cut ones
+#     in full. The few internal SKU exports (values per SKU, named in Chinese)
+#     are searched again for an ordinary datasheet and hidden if there is none.
+#     A record changes only when the re-read is clearly better.
 # Any failure puts the previous reader or the previous datasheets file back.
 # Run    : bash ds_5_whole.sh
 # Version: 1.0 — 2026-10-09 (reader steps as ds_4)
 # =============================================================================
 set -euo pipefail
 
-SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/6d51bc0c74f21ca2cde31619e94796eef3e34cb0/fastegy_ai
+SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/2c33191d06e4ca5e09e8308d5fd1eda3230fd355/fastegy_ai
 LC=librechat
 RD=fastegy-reader
 JOB=fastegy-datasheets
@@ -51,8 +52,8 @@ curl -fsSL "$SRC/kb/ds_collect.py" -o "$STAGE/ds_collect.py"
 curl -fsSL "$SRC/kb/ds_relayout.py" -o "$STAGE/ds_relayout.py"
 (cd "$STAGE" && sha256sum -c --quiet) <<'SUMS' || { echo "Downloaded files do not match; nothing changed."; exit 1; }
 acde93b9386a6e9278fd7c9158c27d4c4b8fe7a8c2ff8dcbec435109036549ae  products.py
-5a8d54cd27ba470dc3fd2e2a0ec0444a03b2e68ef66f86b3c3ffba0a88749b87  ds_collect.py
-b98116a5157a0a772f918e80d8770472b2a41e58a2da9027439fc2cc0526d2be  ds_relayout.py
+6b60aae676623cfb3bcd18c69082ade11e61cbf619759d75206e5643d9cd1be3  ds_collect.py
+d5d4a118be678c7981b5bfd601a91d8d5df11a4a8012252af554fea47f7ea872  ds_relayout.py
 SUMS
 echo "products.py v4.8, collector v1.4 and ds_relayout downloaded and verified"
 
@@ -157,12 +158,15 @@ import json, sys
 old = {r["code"]: r for r in json.load(open(sys.argv[1], encoding="utf-8"))["datasheets"]}
 new = {r["code"]: r for r in json.load(open(sys.argv[2], encoding="utf-8"))["datasheets"]}
 assert old.keys() == new.keys(), "models differ"
-assert all(old[c]["status"] == new[c]["status"] for c in old), "a status changed"
+moves = {(old[c]["status"], new[c]["status"]) for c in old if old[c]["status"] != new[c]["status"]}
+assert moves <= {("found", "skipped")}, f"unexpected status change: {moves}"
 changed = [c for c in old if old[c] != new[c]]
-lost = [c for c in changed if not new[c].get("spec", "").strip()]
+lost = [c for c in changed if new[c]["status"] == "found" and not new[c].get("spec", "").strip()]
 assert not lost, f"empty spec after re-read: {lost}"
+hidden = [c for c in old if new[c]["status"] == "skipped" and old[c]["status"] == "found"]
+assert len(hidden) <= 10, f"too many hidden: {hidden}"
 print(f"datasheets file OK: {len(new)} models, {sum(r['status'] == 'found' for r in new.values())} found, "
-      f"{len(changed)} changed")
+      f"{len(changed)} changed; hidden (only an internal SKU export): {', '.join(hidden) or 'none'}")
 PY
 CHECK_JS='
 (async () => {
