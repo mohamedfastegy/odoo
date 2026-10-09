@@ -20,6 +20,8 @@ Usage (inside the fastegy-reader image, data mounted at /data):
   python /app/ds_relayout.py --probe CODE [CODE ...]    read-only: old vs new for these codes
   python /app/ds_relayout.py --list                     read-only: the records that would be re-read
   python /app/ds_relayout.py --apply                    re-read them and keep the better ones
+Version 1.3 — 2026-10-09: a pause between downloads (--pause, 5 s): run without it, Hikvision's site
+              answered 7 of 86 quick downloads with an HTML page; "cut" means exactly 6000.
 Version 1.2 — 2026-10-09: SKU exports are searched again or hidden (1.1 left other SKUs' values
               under the model's labels); table re-reads keep the old key features (non-empty);
               records whose key features were all empty are read again for them.
@@ -42,7 +44,7 @@ import reader                                    # the assistant's own safe fetc
 
 OUT = "/data/ds/datasheets.json"
 MIN_SHORT = 0.15          # table-style: at least this share of spec lines is 3 characters or fewer
-CUT = 5900                # cut: stored spec this long or longer (the old cap was 6000)
+CUT = 6000                # cut: stored spec exactly this long (the old cap); 5900-5999 were whole
 GAP = re.compile(r" {2,}")
 # the left "section" column of switch tables lands in rows as an extra first cell
 SECTION_ONLY = {"general", "parameters", "network parameters", "poe power", "supply", "poe power supply", "dialing",
@@ -108,7 +110,7 @@ def kind(rec, min_short=MIN_SHORT):
     spec = rec.get("spec", "")
     feats = rec.get("features") or []
     return ("table" if short_share(spec) >= min_short else "sku" if ds_collect.sku_export(spec)
-            else "cut" if len(spec) >= CUT else "features" if feats and not any(f.strip() for f in feats) else None)
+            else "cut" if len(spec) == CUT else "features" if feats and not any(f.strip() for f in feats) else None)
 
 
 def research(rec):
@@ -162,6 +164,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--min-short", type=float, default=MIN_SHORT)
+    ap.add_argument("--pause", type=float, default=5,
+                    help="seconds between downloads (Hikvision's site answers an HTML page to quick bursts)")
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--probe", nargs="+", metavar="CODE")
     group.add_argument("--list", action="store_true")
@@ -211,6 +215,8 @@ def main():
             changed += 1
         if kind(rec, a.min_short) == "sku":       # it searched: go easy on the search engines
             time.sleep(10)
+        elif n < len(todo):
+            time.sleep(a.pause)
         print(f"[{n}/{len(todo)}] {rec['code']}: {'re-read' if keep else 'kept'} ({why})", flush=True)
     if changed:
         ds_collect.save(a.out, [by_code[r["code"]] for r in records])
