@@ -24,7 +24,7 @@
 # =============================================================================
 set -euo pipefail
 
-SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/2c33191d06e4ca5e09e8308d5fd1eda3230fd355/fastegy_ai
+SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/b90d0d00fa8d6715f39955f196d23a4c84b7398b/fastegy_ai
 LC=librechat
 RD=fastegy-reader
 JOB=fastegy-datasheets
@@ -51,9 +51,9 @@ curl -fsSL "$SRC/products.py" -o "$STAGE/products.py"
 curl -fsSL "$SRC/kb/ds_collect.py" -o "$STAGE/ds_collect.py"
 curl -fsSL "$SRC/kb/ds_relayout.py" -o "$STAGE/ds_relayout.py"
 (cd "$STAGE" && sha256sum -c --quiet) <<'SUMS' || { echo "Downloaded files do not match; nothing changed."; exit 1; }
-acde93b9386a6e9278fd7c9158c27d4c4b8fe7a8c2ff8dcbec435109036549ae  products.py
-6b60aae676623cfb3bcd18c69082ade11e61cbf619759d75206e5643d9cd1be3  ds_collect.py
-d5d4a118be678c7981b5bfd601a91d8d5df11a4a8012252af554fea47f7ea872  ds_relayout.py
+d5969c2348eaea6e4e97194bd72c98b58134ef8e8b621fe7ac2b1ddbac28155f  products.py
+80c728f136e2ffab4f71738e5ca08a1b1e6102f67daf6c3dd2098490ad86c60b  ds_collect.py
+df9fd7806bbe49b04ced581175fa8bb54f3d0f658b3d67a91b10bc5e09bece8a  ds_relayout.py
 SUMS
 echo "products.py v4.8, collector v1.4 and ds_relayout downloaded and verified"
 
