@@ -170,6 +170,22 @@ def spec_view(spec, code):
     return "\n".join([*shown, note, *keep])
 
 
+def datasheet_build(ds, code):
+    """A note when the datasheet is for a version or build of the code rather than the code itself:
+    its title adds a bracket ('DS-7616NXI-I2/16P/S(E)') or the file is a regional one ('_EU_')."""
+    title = ds.get("title", "").split(" — ")[0].split(" ")[0].upper()
+    extra = title[len(norm(code)):] if title.startswith(norm(code)) else ""
+    region = re.search(r"_(EU|UK|US|AU|LA|ME|IN)_", ds.get("url", ""))
+    notes = []
+    if re.fullmatch(r"(\([A-Z0-9/]{1,4}\))+", extra):
+        notes.append(f"the datasheet is titled {title}, not exactly {code}: some values may be for that version "
+                     f"or build only")
+    if region:
+        notes.append(f"it is the {region.group(1)} regional datasheet: input voltage, plug type and similar may "
+                     f"differ in other regions")
+    return "; ".join(notes)
+
+
 def several_versions(ds):
     """Does this datasheet cover several versions (so its unmarked key features may not all apply)?"""
     text = "\n".join([*ds.get("features", []), ds.get("spec", "")])
@@ -346,8 +362,11 @@ class Catalog:
                                  f"Lines marked [other versions, NOT {m['code']}] do not apply to it. Lines starting "
                                  f"with '-U:', '-F:', '-SL:' and the like, and features marked (Optional), apply only "
                                  f"to versions with that suffix; {m['code']} has only what its own code shows.")
-                elif ds.get("features"):
-                    lines.append("  Key features: " + "; ".join(ds["features"][:8]))
+                elif any(f.strip() for f in ds.get("features", [])):
+                    lines.append("  Key features: " + "; ".join([f for f in ds["features"] if f.strip()][:8]))
+                build = datasheet_build(ds, m["code"])
+                if build:
+                    lines.append(f"  Note: {build}. Where it matters, say the value may differ for {m['code']}.")
                 spec = spec_view(ds.get("spec", ""), m["code"])
                 lines.append("  Specification:\n" + "\n".join("    " + x for x in spec.split("\n")) if spec.strip()
                              else "  Specification: not read from this file.")
@@ -402,7 +421,8 @@ class Catalog:
                 ds = self.datasheets.get(norm(m["code"]))
                 if not ds:
                     return ""
-                return "; ".join([ds["title"], *([] if several_versions(ds) else ds.get("features", [])[:4])])
+                feats = [] if several_versions(ds) else [f for f in ds.get("features", []) if f.strip()][:4]
+                return "; ".join([ds["title"], *feats])
             top, rows = best(self.carried, lambda m: " ".join(
                 [m["code"], *m["names"], m.get("category") or "", *m.get("tags", []), m.get("ar") or "", ds_line(m)]))
             if rows:

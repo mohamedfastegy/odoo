@@ -21,7 +21,8 @@ Usage (inside the fastegy-reader image, data mounted at /data):
   python /app/ds_relayout.py --list                     read-only: the records that would be re-read
   python /app/ds_relayout.py --apply                    re-read them and keep the better ones
 Version 1.2 — 2026-10-09: SKU exports are searched again or hidden (1.1 left other SKUs' values
-              under the model's labels); table re-reads keep the old key features.
+              under the model's labels); table re-reads keep the old key features (non-empty);
+              records whose key features were all empty are read again for them.
 Version 1.1 — 2026-10-09: section-column cells dropped, justified text joined, titles tidied,
               no empty features (after a probe on the real PDFs).
 Version 1.0 — 2026-10-09
@@ -50,6 +51,7 @@ SECTION = SECTION_ONLY | {"network", "video and audio", "decoding", "hard disk",
                           "network management", "layer 2 function"}     # not "audio" etc.: also real labels
 # justified text spread over the line ("Password  protection,  complicated  password,"): one cell, not four
 WORD_CELL = re.compile(r"^(?:[A-Za-z][A-Za-z,.;:()/&'’\-]*(?: [A-Za-z,.;:()/&'’\-]+)*|\d{1,2})$")
+CUT_SHORT = re.compile(r"(?i)\b(up to|to|and|with|of|for|the|a|in|on)$")   # a feature cut where it wrapped
 NOT_TITLE = re.compile(r"(?i)^(key )?features?$|^specifications?$")
 
 
@@ -104,8 +106,9 @@ def layout_text(url):
 
 def kind(rec, min_short=MIN_SHORT):
     spec = rec.get("spec", "")
+    feats = rec.get("features") or []
     return ("table" if short_share(spec) >= min_short else "sku" if ds_collect.sku_export(spec)
-            else "cut" if len(spec) >= CUT else None)
+            else "cut" if len(spec) >= CUT else "features" if feats and not any(f.strip() for f in feats) else None)
 
 
 def research(rec):
@@ -133,8 +136,10 @@ def reread(rec, how):
     new_rec = {**rec, **found, "checked": datetime.datetime.now(ds_collect.CAIRO).isoformat(timespec="seconds")}
     if how == "table":
         new_rec["layout"] = True
-        # bullets that wrap in two columns can't be joined from layout rows ("Up to"): keep the old ones
-        new_rec["features"] = rec.get("features") or [f for f in found["features"] if len(f) >= 15]
+        # bullets that wrap in two columns can't be joined from layout rows ("Up to"): keep the old ones,
+        # else the layout ones that look whole
+        new_rec["features"] = [f for f in rec.get("features", []) if f.strip()] or [
+            f for f in found["features"] if len(f) >= 15 and not CUT_SHORT.search(f)]
     old_spec, new_spec = rec.get("spec", ""), found["spec"]
     if not new_spec.strip():
         return new_rec, False, "the re-read has no Specification section"
@@ -143,6 +148,11 @@ def reread(rec, how):
         if new > old - 0.10:
             return new_rec, False, f"not clearly better (short lines {old:.2f} -> {new:.2f})"
         return new_rec, True, f"table rows kept together (short lines {old:.2f} -> {new:.2f})"
+    if how == "features":
+        if not new_rec["features"] or new_spec.split("\n")[0] != old_spec.split("\n")[0] \
+                or len(new_spec) < 0.95 * len(old_spec):
+            return new_rec, False, "no key features read, or the specification came out different"
+        return new_rec, True, f"{len(new_rec['features'])} key features read (they were empty)"
     if len(new_spec) <= len(old_spec) or new_spec.split("\n")[0] != old_spec.split("\n")[0]:
         return new_rec, False, f"not longer or starts differently ({len(old_spec)} -> {len(new_spec)} chars)"
     return new_rec, True, f"no longer cut ({len(old_spec)} -> {len(new_spec)} chars)"
@@ -184,7 +194,7 @@ def main():
     todo = [r for r in records if r.get("status") == "found" and kind(r, a.min_short)]
     kinds = [kind(r, a.min_short) for r in todo]
     print(f"{len(todo)} records to re-read: {kinds.count('table')} table-style, {kinds.count('sku')} internal SKU "
-          f"exports, {kinds.count('cut')} cut at 6000 characters", flush=True)
+          f"exports, {kinds.count('cut')} cut at 6000 characters, {kinds.count('features')} with empty key features", flush=True)
     if a.list:
         for r in todo:
             print(f"  {r['code']} | {kind(r, a.min_short)} | short {short_share(r.get('spec', '')):.2f} | "

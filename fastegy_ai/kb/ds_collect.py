@@ -27,7 +27,7 @@ Version 1.4 — 2026-10-09: the Specification heading and the end markers are al
               cell of a "cell | cell" row (rows from ds_relayout.py); specs are stored up to
               12000 characters (was 6000, which cut the end of 69 datasheets); internal SKU exports
               (values listed per SKU, named in Chinese) are skipped for an older datasheet;
-              no empty key features.
+              key features whose bullet is alone on its line are read from the next line.
 Version 1.3 — 2026-10-08: a datasheet counts only with an English "Specification" section (a French
               or spec-less file is skipped for the next candidate), and localized links
               (/fr-fr/, /de-de/ ...) are tried after the others.
@@ -103,7 +103,15 @@ def parse(text, code, cap=SPEC_CAP):
         nxt = head[at + 1]
         if not nxt.startswith("•") and len(nxt) < 90 and not rx.search(nxt.upper()):
             title += " — " + nxt
-    features = [line.lstrip("• ").strip() for line in head if line.startswith("•") and line.lstrip("• ").strip()][:10]
+    features = []
+    for i, line in enumerate(head):            # "•" alone on its line: the feature is the next line
+        if line.startswith("•"):
+            text = line.lstrip("• ").strip()
+            if not text and i + 1 < len(head) and not head[i + 1].startswith("•"):
+                text = head[i + 1]
+            if text:
+                features.append(text)
+    features = features[:10]
     return {"title": title, "features": features, "spec": "\n".join(spec)[:cap]}
 
 
