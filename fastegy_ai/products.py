@@ -278,7 +278,14 @@ class Catalog:
         kinds = [k for k, _, _ in parts]
         body = "\n\n".join((h + "\n" + t).strip() for _, h, t in parts)
         if "exact" in kinds:
-            return f"EXACT MATCH for {query}:\n\n{body}"
+            notes = []
+            if "FastEgy carries" in body:
+                notes.append("Say it as «موجود في قائمة منتجاتنا». Never «متوفر» or «متاح»: those mean in stock, "
+                             "and the list says nothing about stock.")
+            if "FastEgy description (Arabic" in body and ("Key specs" in body or "Official Hikvision datasheet" in body):
+                notes.append("If FastEgy's description and the official specs give different numbers for the same "
+                             "thing, give the official one and say that FastEgy's description differs.")
+            return f"EXACT MATCH for {query}:\n\n{body}" + ("\n\n" + " ".join(notes) if notes else "")
         web = ("If you have web search, look up the official datasheet of this exact code and give its specs "
                "with the link; otherwise ask which code the user means. Never present another code's specs as this one's.")
         if any(k in ("variant", "near") for k in kinds):
@@ -447,5 +454,6 @@ class Catalog:
         if not out:
             return f"No catalog entries match: {text}"
         out.append("These lines are everything known about these models here: do not add specs that are not "
-                   "written above. Use lookup_product on a code for its full entry.")
+                   "written above. Use lookup_product on a code for its full entry. A model in FastEgy's list is "
+                   "«موجود في قائمة منتجاتنا», never «متوفر»: the list says nothing about stock.")
         return "\n".join(out)
