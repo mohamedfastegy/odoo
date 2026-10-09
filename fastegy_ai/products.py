@@ -145,6 +145,31 @@ def mark_versions(spec, code):
     return "\n".join(out)
 
 
+SPEC_CHARS = 4500            # datasheet text shown per model; the rest is cut, keeping the lines below
+KEY_LABEL = re.compile(r"^(?:\[[^\]]*\]\s*)?(?:Power|Max\. Power|Consumption|Protection|Weight|Dimension|Working|"
+                       r"Operating|Material|On-?board Storage|Storage)", re.I)
+
+
+def spec_view(spec, code):
+    """The datasheet text for lookup_product: up to SPEC_CHARS, then, from the rest, only the version lines and
+    the power / protection / size lines, with a note that the rest was cut (so the model doesn't fill it in)."""
+    lines = mark_versions(spec, code).split("\n")
+    shown, size = [], 0
+    for line in lines:
+        if size + len(line) > SPEC_CHARS:
+            break
+        shown.append(line)
+        size += len(line) + 1
+    rest = lines[len(shown):]
+    if not rest:
+        return "\n".join(shown)
+    keep = [line for line in rest if line.startswith("[") or VERSION_LINE.match(line) or KEY_LABEL.match(line)]
+    note = (f"(datasheet cut here: {len(rest)} more lines not shown"
+            + ("; the version, power and size lines among them follow" if keep else "")
+            + ". For a value not shown, say it is not in the part of the datasheet you have; do not guess it.)")
+    return "\n".join([*shown, note, *keep])
+
+
 def several_versions(ds):
     """Does this datasheet cover several versions (so its unmarked key features may not all apply)?"""
     text = "\n".join([*ds.get("features", []), ds.get("spec", "")])
@@ -323,7 +348,7 @@ class Catalog:
                                  f"to versions with that suffix; {m['code']} has only what its own code shows.")
                 elif ds.get("features"):
                     lines.append("  Key features: " + "; ".join(ds["features"][:8]))
-                spec = mark_versions(ds.get("spec", ""), m["code"])[:3200]
+                spec = spec_view(ds.get("spec", ""), m["code"])
                 lines.append("  Specification:\n" + "\n".join("    " + x for x in spec.split("\n")) if spec.strip()
                              else "  Specification: not read from this file.")
             lines.append("The list says nothing about stock or price: do not claim either.")

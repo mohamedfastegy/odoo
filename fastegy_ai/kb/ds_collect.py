@@ -23,6 +23,9 @@ Usage:
   --ignore-blocked  engines known to be blocked already (comma list); without it, the engines
                     blocked at the job's first search
 
+Version 1.4 — 2026-10-09: the Specification heading and the end markers are also found as the first
+              cell of a "cell | cell" row (rows from ds_relayout.py); specs are stored up to
+              12000 characters (was 6000, which cut the end of 69 datasheets).
 Version 1.3 — 2026-10-08: a datasheet counts only with an English "Specification" section (a French
               or spec-less file is skipped for the next candidate), and localized links
               (/fr-fr/, /de-de/ ...) are tried after the others.
@@ -66,17 +69,21 @@ def clean(text):
     return re.sub(r"[ \t]{2,}", " ", t)
 
 
-def parse(text, code):
+SPEC_CAP = 12000                     # stored spec text; lookup_product shows a part of it (products.spec_view)
+
+
+def parse(text, code, cap=SPEC_CAP):
     """{'title', 'features', 'spec'} from a datasheet's text, or None if it is not for this code."""
     t = clean(text)
     if not code_regex(code).search(t.upper()):
         return None
     lines = [line.strip() for line in t.splitlines() if line.strip()]
-    start = next((i for i, line in enumerate(lines) if re.fullmatch(r"•?\s*Specifications?", line)), None)
+    first = [re.split(r" \|(?: |$)", line)[0].lstrip("• ") for line in lines]   # ds_relayout rows: "cell | cell"
+    start = next((i for i, cell in enumerate(first) if re.fullmatch(r"Specifications?", cell)), None)
     head = lines[:start] if start is not None else lines[:20]
     spec = lines[start + 1:] if start is not None else []
-    end = next((i for i, line in enumerate(spec)
-                if line.lstrip("• ") == "Dimension" or line.lstrip("• ").startswith(SPEC_END)), len(spec))
+    end = next((i for i, cell in enumerate(first[start + 1:] if start is not None else [])
+                if cell == "Dimension" or cell.startswith(SPEC_END)), len(spec))
     spec = spec[:end]
     rx = code_regex(code)
     at = next((i for i, line in enumerate(head) if rx.search(line.upper())), None)
@@ -86,7 +93,7 @@ def parse(text, code):
         if not nxt.startswith("•") and len(nxt) < 90 and not rx.search(nxt.upper()):
             title += " — " + nxt
     features = [line.lstrip("• ").strip() for line in head if line.startswith("•")][:10]
-    return {"title": title, "features": features, "spec": "\n".join(spec)[:6000]}
+    return {"title": title, "features": features, "spec": "\n".join(spec)[:cap]}
 
 
 def search(code):
