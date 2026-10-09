@@ -25,8 +25,9 @@ Usage:
 
 Version 1.4 — 2026-10-09: the Specification heading and the end markers are also found as the first
               cell of a "cell | cell" row (rows from ds_relayout.py); specs are stored up to
-              12000 characters (was 6000, which cut the end of 69 datasheets); lines listing
-              internal SKU names in Chinese keep only their value; no empty key features.
+              12000 characters (was 6000, which cut the end of 69 datasheets); internal SKU exports
+              (values listed per SKU, named in Chinese) are skipped for an older datasheet;
+              no empty key features.
 Version 1.3 — 2026-10-08: a datasheet counts only with an English "Specification" section (a French
               or spec-less file is skipped for the next candidate), and localized links
               (/fr-fr/, /de-de/ ...) are tried after the others.
@@ -76,18 +77,10 @@ SPEC_CAP = 12000                     # stored spec text; lookup_product shows a 
 CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]")      # kana and ideographs, not "、" or "："
 
 
-def drop_sku_lists(lines):
-    """Some 2025 datasheets list internal SKU names in Chinese before each value
-    ("DS-7616NXI-I2/16P/S( 标配)(C),...:1920 × 1080/60 Hz"): keep only the value after the last colon."""
-    out = []
-    for line in lines:
-        if CJK.search(line):
-            value = re.split(r"[:：]", line)[-1].strip() if re.search(r"[:：]", line) else ""
-            if value and not CJK.search(value):
-                out.append(value)
-            continue
-        out.append(line)
-    return out
+def sku_export(text):
+    """Some late-2025 datasheets are internal SKU exports: each value is listed per SKU, named in Chinese
+    ("DS-7616NXI-I2/16P/S( 标配)(C),...:10,000 face pictures"), so values can't be tied to one model."""
+    return len(CJK.findall(text)) > 20
 
 
 def parse(text, code, cap=SPEC_CAP):
@@ -102,7 +95,7 @@ def parse(text, code, cap=SPEC_CAP):
     spec = lines[start + 1:] if start is not None else []
     end = next((i for i, cell in enumerate(first[start + 1:] if start is not None else [])
                 if cell == "Dimension" or cell.startswith(SPEC_END)), len(spec))
-    spec = drop_sku_lists(spec[:end])
+    spec = spec[:end]
     rx = code_regex(code)
     at = next((i for i, line in enumerate(head) if rx.search(line.upper())), None)
     title = head[at] if at is not None else code
@@ -165,9 +158,11 @@ def collect(code, results, max_pdfs=3):
         except Exception as e:                    # a broken or blocked PDF: try the next one
             found = None
             tried[-1] += f" ({str(e)[:60]})"
-        if found and found["spec"].strip():
+        if found and sku_export(found["spec"]):  # values per internal SKU: try an older datasheet
+            tried[-1] += " (internal SKU export)"
+        elif found and found["spec"].strip():
             return {"code": code, "status": "found", "url": url, **found}
-        if found:                                 # names the code but has no English specification
+        elif found:                               # names the code but has no English specification
             tried[-1] += " (no Specification section)"
     return {"code": code, "status": "not_found", "results": len(results), "tried": tried}
 

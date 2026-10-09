@@ -10,8 +10,9 @@ side keep their columns.
 Records stored before collector v1.4 were cut at 6000 characters, which lost the end of long
 datasheets (power, size). Those are read again the normal way and stored up to 12000.
 
-A few 2025 datasheets list internal SKU names in Chinese before each value; collector v1.4 keeps
-only the values, so those are read again too.
+A few late-2025 datasheets are internal SKU exports (each value listed per SKU, named in Chinese), so
+their values can't be tied to one model: those are searched again for an older, ordinary datasheet,
+and hidden when there is none.
 
 A record is replaced only when the re-read is clearly better and still names the exact code.
 
@@ -19,8 +20,10 @@ Usage (inside the fastegy-reader image, data mounted at /data):
   python /app/ds_relayout.py --probe CODE [CODE ...]    read-only: old vs new for these codes
   python /app/ds_relayout.py --list                     read-only: the records that would be re-read
   python /app/ds_relayout.py --apply                    re-read them and keep the better ones
+Version 1.2 — 2026-10-09: SKU exports are searched again or hidden (1.1 left other SKUs' values
+              under the model's labels); table re-reads keep the old key features.
 Version 1.1 — 2026-10-09: section-column cells dropped, justified text joined, titles tidied,
-              Chinese SKU lists removed, no empty features (after a probe on the real PDFs).
+              no empty features (after a probe on the real PDFs).
 Version 1.0 — 2026-10-09
 """
 import argparse
@@ -29,6 +32,7 @@ import io
 import json
 import re
 import sys
+import time
 
 sys.path.insert(0, "/app")
 
@@ -100,12 +104,27 @@ def layout_text(url):
 
 def kind(rec, min_short=MIN_SHORT):
     spec = rec.get("spec", "")
-    return ("table" if short_share(spec) >= min_short else "sku" if ds_collect.CJK.search(spec)
+    return ("table" if short_share(spec) >= min_short else "sku" if ds_collect.sku_export(spec)
             else "cut" if len(spec) >= CUT else None)
 
 
+def research(rec):
+    """An internal SKU export: search again for an older, ordinary datasheet; without one, hide the record
+    (status "skipped"), since its values can't be tied to this model."""
+    now = datetime.datetime.now(ds_collect.CAIRO).isoformat(timespec="seconds")
+    new = ds_collect.collect(rec["code"], ds_collect.search(rec["code"]).get("results", []))
+    if new["status"] == "found":
+        return {**new, "checked": now}, True, f"an ordinary datasheet found instead: {new['url']}"
+    return ({"code": rec["code"], "status": "skipped", "why": "only an internal SKU export", "url": rec["url"],
+             "tried": new.get("tried", []), "checked": now}, True,
+            "no ordinary datasheet: hidden, so the assistant does not mix up the SKUs' values")
+
+
 def reread(rec, how):
-    """(re-read record or None, keep it?, why). how: "table" (layout read) or "cut" (normal read, longer)."""
+    """(re-read record or None, keep it?, why). how: "table" (layout read), "cut" (normal read, longer)
+    or "sku" (search again)."""
+    if how == "sku":
+        return research(rec)
     text = layout_text(rec["url"]) if how == "table" else ds_collect.pdf_text(rec["url"])
     found = ds_collect.parse(text, rec["code"])
     if not found:
@@ -114,6 +133,8 @@ def reread(rec, how):
     new_rec = {**rec, **found, "checked": datetime.datetime.now(ds_collect.CAIRO).isoformat(timespec="seconds")}
     if how == "table":
         new_rec["layout"] = True
+        # bullets that wrap in two columns can't be joined from layout rows ("Up to"): keep the old ones
+        new_rec["features"] = rec.get("features") or [f for f in found["features"] if len(f) >= 15]
     old_spec, new_spec = rec.get("spec", ""), found["spec"]
     if not new_spec.strip():
         return new_rec, False, "the re-read has no Specification section"
@@ -122,12 +143,6 @@ def reread(rec, how):
         if new > old - 0.10:
             return new_rec, False, f"not clearly better (short lines {old:.2f} -> {new:.2f})"
         return new_rec, True, f"table rows kept together (short lines {old:.2f} -> {new:.2f})"
-    if ds_collect.CJK.search(new_spec):
-        return new_rec, False, "the re-read still has Chinese SKU lines"
-    if how == "sku":
-        if len(new_spec) < 200:
-            return new_rec, False, f"too little left without the SKU lines ({len(new_spec)} chars)"
-        return new_rec, True, f"internal SKU lists removed ({len(old_spec)} -> {len(new_spec)} chars)"
     if len(new_spec) <= len(old_spec) or new_spec.split("\n")[0] != old_spec.split("\n")[0]:
         return new_rec, False, f"not longer or starts differently ({len(old_spec)} -> {len(new_spec)} chars)"
     return new_rec, True, f"no longer cut ({len(old_spec)} -> {len(new_spec)} chars)"
@@ -155,7 +170,9 @@ def main():
             new, keep, why = reread(rec, how)
             print(f"== {code} [{kind(rec, a.min_short) or 'looks fine'}]: {'would re-read' if keep else 'would keep'} "
                   f"({why})\nurl: {rec['url']}\nold title: {rec.get('title')}")
-            if new:
+            if new and new.get("status") != "found":
+                print(f"new status: {new['status']} ({new.get('why')}); tried: {new.get('tried')}")
+            elif new:
                 lines = new["spec"].split("\n")
                 print(f"new title: {new['title']}\nnew features: {new['features'][:6]}\n"
                       f"new spec ({len(new['spec'])} chars, {len(lines)} lines), first 60 and last 12 lines:")
@@ -166,8 +183,8 @@ def main():
         return
     todo = [r for r in records if r.get("status") == "found" and kind(r, a.min_short)]
     kinds = [kind(r, a.min_short) for r in todo]
-    print(f"{len(todo)} records to re-read: {kinds.count('table')} table-style, {kinds.count('sku')} with Chinese "
-          f"SKU lists, {kinds.count('cut')} cut at 6000 characters", flush=True)
+    print(f"{len(todo)} records to re-read: {kinds.count('table')} table-style, {kinds.count('sku')} internal SKU "
+          f"exports, {kinds.count('cut')} cut at 6000 characters", flush=True)
     if a.list:
         for r in todo:
             print(f"  {r['code']} | {kind(r, a.min_short)} | short {short_share(r.get('spec', '')):.2f} | "
@@ -182,6 +199,8 @@ def main():
         if keep:
             by_code[rec["code"]] = new
             changed += 1
+        if kind(rec, a.min_short) == "sku":       # it searched: go easy on the search engines
+            time.sleep(10)
         print(f"[{n}/{len(todo)}] {rec['code']}: {'re-read' if keep else 'kept'} ({why})", flush=True)
     if changed:
         ds_collect.save(a.out, [by_code[r["code"]] for r in records])
