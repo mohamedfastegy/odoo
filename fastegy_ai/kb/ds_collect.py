@@ -25,7 +25,8 @@ Usage:
 
 Version 1.4 — 2026-10-09: the Specification heading and the end markers are also found as the first
               cell of a "cell | cell" row (rows from ds_relayout.py); specs are stored up to
-              12000 characters (was 6000, which cut the end of 69 datasheets).
+              12000 characters (was 6000, which cut the end of 69 datasheets); lines listing
+              internal SKU names in Chinese keep only their value; no empty key features.
 Version 1.3 — 2026-10-08: a datasheet counts only with an English "Specification" section (a French
               or spec-less file is skipped for the next candidate), and localized links
               (/fr-fr/, /de-de/ ...) are tried after the others.
@@ -72,6 +73,23 @@ def clean(text):
 SPEC_CAP = 12000                     # stored spec text; lookup_product shows a part of it (products.spec_view)
 
 
+CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]")      # kana and ideographs, not "、" or "："
+
+
+def drop_sku_lists(lines):
+    """Some 2025 datasheets list internal SKU names in Chinese before each value
+    ("DS-7616NXI-I2/16P/S( 标配)(C),...:1920 × 1080/60 Hz"): keep only the value after the last colon."""
+    out = []
+    for line in lines:
+        if CJK.search(line):
+            value = re.split(r"[:：]", line)[-1].strip() if re.search(r"[:：]", line) else ""
+            if value and not CJK.search(value):
+                out.append(value)
+            continue
+        out.append(line)
+    return out
+
+
 def parse(text, code, cap=SPEC_CAP):
     """{'title', 'features', 'spec'} from a datasheet's text, or None if it is not for this code."""
     t = clean(text)
@@ -84,7 +102,7 @@ def parse(text, code, cap=SPEC_CAP):
     spec = lines[start + 1:] if start is not None else []
     end = next((i for i, cell in enumerate(first[start + 1:] if start is not None else [])
                 if cell == "Dimension" or cell.startswith(SPEC_END)), len(spec))
-    spec = spec[:end]
+    spec = drop_sku_lists(spec[:end])
     rx = code_regex(code)
     at = next((i for i, line in enumerate(head) if rx.search(line.upper())), None)
     title = head[at] if at is not None else code
@@ -92,7 +110,7 @@ def parse(text, code, cap=SPEC_CAP):
         nxt = head[at + 1]
         if not nxt.startswith("•") and len(nxt) < 90 and not rx.search(nxt.upper()):
             title += " — " + nxt
-    features = [line.lstrip("• ").strip() for line in head if line.startswith("•")][:10]
+    features = [line.lstrip("• ").strip() for line in head if line.startswith("•") and line.lstrip("• ").strip()][:10]
     return {"title": title, "features": features, "spec": "\n".join(spec)[:cap]}
 
 

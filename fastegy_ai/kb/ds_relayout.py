@@ -1,4 +1,5 @@
-"""Re-read datasheets that were stored badly: table-style ones, and ones cut at 6000 characters.
+"""Re-read datasheets that were stored badly: table-style ones, ones cut at 6000 characters, and ones
+with internal SKU lists in Chinese.
 
 For some Hikvision datasheets (switches especially) pypdf's default text extraction puts every
 table cell on its own line ("Switching Capacity" / "40 Gbps") and splits words ("Metal m" /
@@ -9,12 +10,17 @@ side keep their columns.
 Records stored before collector v1.4 were cut at 6000 characters, which lost the end of long
 datasheets (power, size). Those are read again the normal way and stored up to 12000.
 
+A few 2025 datasheets list internal SKU names in Chinese before each value; collector v1.4 keeps
+only the values, so those are read again too.
+
 A record is replaced only when the re-read is clearly better and still names the exact code.
 
 Usage (inside the fastegy-reader image, data mounted at /data):
   python /app/ds_relayout.py --probe CODE [CODE ...]    read-only: old vs new for these codes
   python /app/ds_relayout.py --list                     read-only: the records that would be re-read
   python /app/ds_relayout.py --apply                    re-read them and keep the better ones
+Version 1.1 — 2026-10-09: section-column cells dropped, justified text joined, titles tidied,
+              Chinese SKU lists removed, no empty features (after a probe on the real PDFs).
 Version 1.0 — 2026-10-09
 """
 import argparse
@@ -33,11 +39,43 @@ OUT = "/data/ds/datasheets.json"
 MIN_SHORT = 0.15          # table-style: at least this share of spec lines is 3 characters or fewer
 CUT = 5900                # cut: stored spec this long or longer (the old cap was 6000)
 GAP = re.compile(r" {2,}")
+# the left "section" column of switch tables lands in rows as an extra first cell
+SECTION_ONLY = {"general", "parameters", "network parameters", "poe power", "supply", "poe power supply", "dialing",
+                "function", "dialing function", "software function", "approval"}
+SECTION = SECTION_ONLY | {"network", "video and audio", "decoding", "hard disk", "external interface",
+                          "network management", "layer 2 function"}     # not "audio" etc.: also real labels
+# justified text spread over the line ("Password  protection,  complicated  password,"): one cell, not four
+WORD_CELL = re.compile(r"^(?:[A-Za-z][A-Za-z,.;:()/&'’\-]*(?: [A-Za-z,.;:()/&'’\-]+)*|\d{1,2})$")
+NOT_TITLE = re.compile(r"(?i)^(key )?features?$|^specifications?$")
 
 
 def short_share(spec):
     lines = [line.strip() for line in spec.split("\n") if line.strip()]
     return sum(len(line) <= 3 for line in lines) / len(lines) if lines else 0.0
+
+
+def tidy(cells):
+    """Drop a section-column cell and join runs of 3+ single-word cells (justified text)."""
+    if len(cells) >= 3 and cells[0].lower() in SECTION or len(cells) == 2 and cells[0].lower() in SECTION_ONLY:
+        cells = cells[1:]
+    out, run = [], []
+    for cell in [*cells, None]:
+        if cell is not None and len(cell) <= 15 and WORD_CELL.match(cell):
+            run.append(cell)
+            continue
+        out.extend([" ".join(run)] if len(run) >= 3 else run)
+        run = []
+        if cell is not None:
+            out.append(cell)
+    return out
+
+
+def tidy_title(title):
+    """'DS-8616NI-I8(B) | Series | NVR — Key Feature' -> 'DS-8616NI-I8(B) Series NVR'."""
+    main, _, rest = title.partition(" — ")
+    title = main.replace(" | ", " ")
+    rest = rest.split(" | ")[0].strip()
+    return f"{title} — {rest}" if rest and not NOT_TITLE.match(rest) else title
 
 
 def layout_text(url):
@@ -50,18 +88,20 @@ def layout_text(url):
     for page in pdf.pages[:reader.MAX_PDF_PAGES]:
         for line in (page.extract_text(extraction_mode="layout") or "").splitlines():
             line = ds_collect.clean(GAP.sub(" | ", line.strip()))     # cells first, then bullet glyphs etc.
+            line = re.sub(r"•\s*\|\s*", "• ", line)                     # "•   text": the bullet's own gap
             if not line:
                 continue
             if " | •" in line or " | " in line and line.startswith("•"):   # two columns of bullets
                 rows.extend(part.strip() for part in line.split(" | ") if part.strip())
             else:
-                rows.append(line)
+                rows.append(" | ".join(tidy([cell.strip() for cell in line.split(" | ") if cell.strip()])))
     return "\n".join(rows)
 
 
 def kind(rec, min_short=MIN_SHORT):
     spec = rec.get("spec", "")
-    return "table" if short_share(spec) >= min_short else "cut" if len(spec) >= CUT else None
+    return ("table" if short_share(spec) >= min_short else "sku" if ds_collect.CJK.search(spec)
+            else "cut" if len(spec) >= CUT else None)
 
 
 def reread(rec, how):
@@ -70,7 +110,7 @@ def reread(rec, how):
     found = ds_collect.parse(text, rec["code"])
     if not found:
         return None, False, "the re-read does not name the exact code"
-    found["title"] = found["title"].replace(" | ", " — ")
+    found["title"] = tidy_title(found["title"])
     new_rec = {**rec, **found, "checked": datetime.datetime.now(ds_collect.CAIRO).isoformat(timespec="seconds")}
     if how == "table":
         new_rec["layout"] = True
@@ -82,6 +122,12 @@ def reread(rec, how):
         if new > old - 0.10:
             return new_rec, False, f"not clearly better (short lines {old:.2f} -> {new:.2f})"
         return new_rec, True, f"table rows kept together (short lines {old:.2f} -> {new:.2f})"
+    if ds_collect.CJK.search(new_spec):
+        return new_rec, False, "the re-read still has Chinese SKU lines"
+    if how == "sku":
+        if len(new_spec) < 200:
+            return new_rec, False, f"too little left without the SKU lines ({len(new_spec)} chars)"
+        return new_rec, True, f"internal SKU lists removed ({len(old_spec)} -> {len(new_spec)} chars)"
     if len(new_spec) <= len(old_spec) or new_spec.split("\n")[0] != old_spec.split("\n")[0]:
         return new_rec, False, f"not longer or starts differently ({len(old_spec)} -> {len(new_spec)} chars)"
     return new_rec, True, f"no longer cut ({len(old_spec)} -> {len(new_spec)} chars)"
@@ -119,9 +165,9 @@ def main():
             print(flush=True)
         return
     todo = [r for r in records if r.get("status") == "found" and kind(r, a.min_short)]
-    tables = sum(kind(r, a.min_short) == "table" for r in todo)
-    print(f"{len(todo)} records to re-read: {tables} table-style, {len(todo) - tables} cut at 6000 characters",
-          flush=True)
+    kinds = [kind(r, a.min_short) for r in todo]
+    print(f"{len(todo)} records to re-read: {kinds.count('table')} table-style, {kinds.count('sku')} with Chinese "
+          f"SKU lists, {kinds.count('cut')} cut at 6000 characters", flush=True)
     if a.list:
         for r in todo:
             print(f"  {r['code']} | {kind(r, a.min_short)} | short {short_share(r.get('spec', '')):.2f} | "
