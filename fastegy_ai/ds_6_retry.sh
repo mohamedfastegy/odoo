@@ -2,18 +2,18 @@
 # =============================================================================
 # FastEgy AI — datasheets 6: retry the downloads that failed in ds_5
 #
-# ds_5 re-read 74 of 86 datasheets. Seven downloads got an HTML page from
-# Hikvision's site instead of the PDF (too many in a row), so two switch
-# tables (DS-3E1526P-SI, DS-TPE104) and five datasheets cut at 6000
-# characters are still as before. This runs ds_relayout 1.3, which pauses
-# 15 s between downloads, on whatever still needs it. Only the datasheets
-# file changes; the previous one is kept and put back on any failure.
+# ds_5 re-read 74 of 86 datasheets. Seven saved links answer an HTML page
+# instead of the PDF (also 15 s apart, so it is the link, not the pace): two
+# switch tables (DS-3E1526P-SI, DS-TPE104) and five datasheets cut at 6000
+# characters. ds_relayout 1.4 pauses between downloads and, when a saved link
+# fails, searches again and re-reads from another official link. Only the
+# datasheets file changes; the previous one is kept and put back on failure.
 # Run    : bash ds_6_retry.sh
-# Version: 1.0 — 2026-10-09
+# Version: 1.1 — 2026-10-09 (1.0: ds_relayout 1.3, no other links)
 # =============================================================================
 set -euo pipefail
 
-SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/a95c22473aee197b5a511de4b47635aceabc46b7/fastegy_ai
+SRC=https://raw.githubusercontent.com/mohamedfastegy/odoo/65151dc7f3d48aedd17f2fdde2fe56f69681b6bf/fastegy_ai
 LC=librechat
 RD=fastegy-reader
 JOB=fastegy-datasheets
@@ -32,8 +32,8 @@ NET=$(docker inspect "$LC" -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 curl -fsSL "$SRC/kb/ds_relayout.py" -o "$STAGE/ds_relayout.py"
-echo "16271bfd96e0b5fdb5fcee3de71b14d6d6d802de0a2e43a361ceb311ff5f8355  $STAGE/ds_relayout.py" | sha256sum -c --quiet || { echo "Downloaded file does not match; nothing changed."; exit 1; }
-echo "ds_relayout 1.3 downloaded and verified"
+echo "5e2e31e34fbcdf5f4475f2a4fb6b97491e6d7aadc4033f56151d96c577a559fe  $STAGE/ds_relayout.py" | sha256sum -c --quiet || { echo "Downloaded file does not match; nothing changed."; exit 1; }
+echo "ds_relayout 1.4 downloaded and verified"
 
 restore() {
   echo "!! $1 — putting the previous datasheets file back"
