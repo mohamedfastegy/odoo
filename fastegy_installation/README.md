@@ -1,18 +1,18 @@
-# موديول التركيبات — نسخة 6.9.279 (مشفّرة)
+# موديول التركيبات — نسخة 6.9.280 (مشفّرة)
 
-الملف ده مشفّر عشان المستودع عام. الباسورد اتبعت لصاحب الشركة لوحده، ومش موجود هنا (نفس باسورد نسخة 6.9.277 و6.9.278).
+الملف ده مشفّر عشان المستودع عام. الباسورد اتبعت لصاحب الشركة لوحده، ومش موجود هنا (نفس باسورد نسخ 277 و278 و279).
 
-`fastegy_v279.tar.enc`
+`fastegy_v280.tar.enc`
 
 بصمة الملف المشفّر:
 
-`be902a74c6d5a8313bb571677d1f692b`
+`9f8934d90ce675ee3bb5210d16117284`
 
 جواه 3 ملفات:
 
-- `fastegy_installation_v6.9.279.tar.xz`
-- `deploy_v279.sh`
-- `test_v279.sh`
+- `fastegy_installation_v6.9.280.tar.xz`
+- `deploy_v280.sh`
+- `test_v280.sh`
 
 ---
 
@@ -20,9 +20,9 @@
 
 ```bash
 cd ~/src/user/private_addons/fastegy_projectx
-curl -fsSL -o fastegy_v279.tar.enc https://raw.githubusercontent.com/mohamedfastegy/odoo/claude/fastegy-installation-v279/fastegy_installation/fastegy_v279.tar.enc
-openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in fastegy_v279.tar.enc -out fastegy_v279.tar && tar -xf fastegy_v279.tar && rm -f fastegy_v279.tar.enc fastegy_v279.tar
-bash deploy_v279.sh
+curl -fsSL -o fastegy_v280.tar.enc https://raw.githubusercontent.com/mohamedfastegy/odoo/claude/fastegy-installation-v280/fastegy_installation/fastegy_v280.tar.enc
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in fastegy_v280.tar.enc -out fastegy_v280.tar && tar -xf fastegy_v280.tar && rm -f fastegy_v280.tar.enc fastegy_v280.tar
+bash deploy_v280.sh
 ```
 
 الأمر التالت هيطلب الباسورد: الصقه ودوس Enter (مش هيظهر وانت بتكتبه).
