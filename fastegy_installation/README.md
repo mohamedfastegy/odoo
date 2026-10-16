@@ -6,8 +6,8 @@
 
 | الملف | بيستخدم فين | البصمة |
 |---|---|---|
-| `fastegy_v285.tar.enc` | الستيجنج واللايف | `024a1fbbdc658906a23ab73d8cb73f81` |
-| `fastegy_v285_test.tar.enc` | الستيجنج بس | `7cafa661a6dee87362571293a726f2a4` |
+| `fastegy_v285.tar.enc` | الستيجنج واللايف | `d6696de57216661837d53853de54a621` |
+| `fastegy_v285_test.tar.enc` | الستيجنج بس | `c062892fd6bf5276ac60f14a96ee4ea0` |
 
 `fastegy_v285.tar.enc` جواه ملفين:
 
