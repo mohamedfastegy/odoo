@@ -7,7 +7,7 @@
 | الملف | بيستخدم فين | البصمة |
 |---|---|---|
 | `fastegy_v284.tar.enc` | الستيجنج واللايف | `0c6d0b131c3584553f7339c7c7730d21` |
-| `fastegy_v284_test.tar.enc` | الستيجنج بس | `7be67f456198e9fd8cbeaec95375b801` |
+| `fastegy_v284_test.tar.enc` | الستيجنج بس | `487beb05f6236436d7ebb548dcce2f9e` |
 
 `fastegy_v284.tar.enc` جواه ملفين:
 
