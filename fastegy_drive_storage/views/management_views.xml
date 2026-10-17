@@ -1,42 +1,83 @@
 <odoo>
     <record id="view_drive_storage_management" model="ir.ui.view">
-        <field name="name">fastegy.drive.storage.management</field><field name="model">fs.storage</field>
-        <field name="inherit_id" ref="view_drive_storage_form"/>
+        <field name="name">fastegy.drive.storage.management</field>
+        <field name="model">fs.storage</field>
+        <field name="inherit_id" ref="view_drive_storage_form" />
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
-                <button name="action_fd_health" type="object" string="Refresh health"/>
-                <button name="action_fd_files" type="object" string="Managed files"/>
-                <button name="action_fd_reconcile" type="object" string="Reconcile next batch" confirm="Read the next bounded metadata batch and compare the registry. No cloud file will be deleted."/>
-                <button name="action_fd_manifest" type="object" string="Export recovery manifest"/>
+                <button name="action_fd_health" type="object" string="تحديث الحالة" />
+                <button name="action_fd_files" type="object" string="الملفات المدارة" />
+                <button name="action_fd_reconcile" type="object" string="مراجعة دفعة ملفات" confirm="Read the next bounded metadata batch and compare the registry. No cloud file will be deleted." />
+                <button name="action_fd_manifest" type="object" string="تصدير بيانات الاستعادة" />
             </xpath>
             <xpath expr="//notebook" position="inside">
-                <page string="Health and operations"><group>
-                    <group><field name="fd_health"/><field name="fd_checked_at"/><field name="fd_error_category"/>
-                        <field name="fd_quota_known"/><field name="fd_quota_used"/><field name="fd_quota_limit"/></group>
-                    <group><field name="fd_blob_count"/><field name="fd_blob_bytes"/><field name="fd_failed_jobs"/>
-                        <field name="fd_orphan_count"/><field name="fd_reconcile_in_progress"/><field name="fd_reconciled_at"/>
-                        <field name="fd_jobs_enabled"/><field name="fd_monitor_enabled"/>
-                        <field name="fd_notify_user_id"/></group>
-                </group><p>Quota is account-wide. Managed bytes count registry entries, not the whole account. Activate the corresponding scheduled actions after testing.</p></page>
-                <page string="Folders and recovery"><group>
-                    <field name="fd_folder_layout"/><field name="fd_shared_drive_id"/><field name="fd_shared_verified"/>
-                    <field name="fd_retention_days"/>
-                </group><p>New presentation folders use company/model/record/field identifiers. Existing files move only when their metadata is repaired. Unreferenced files are never permanently deleted by this addon.</p></page>
-                <page string="Setup guide and secrets" groups="base.group_system">
-                    <ol>
-                        <li>Create a Google Cloud project and enable Drive API.</li>
-                        <li>Configure the consent screen and a Web OAuth client.</li>
-                        <li>Add the exact redirect URI shown on this connection.</li>
-                        <li>Save the client ID and secret, then use Connect Google with the limited file scope.</li>
-                        <li>Keep a dedicated folder; select a Shared Drive ID only when using that company's shared drive.</li>
-                        <li>Test folder access before allowing writes.</li>
-                        <li>Provide FASTEGY_DRIVE_SECRET_KEYS, or a private 0600 keys.json in ~/data/.fastegy-drive; keep a separate recovery copy and verify key persistence after rebuilding the host.</li>
-                        <li>Encrypt legacy credentials, audit model coverage, then test one image and one document.</li>
-                    </ol>
-                    <group><field name="fd_oauth_lifecycle"/><field name="fd_encryption_state"/>
-                        <field name="fd_picker_api_key"/><field name="fd_picker_app_id"/></group>
-                    <button name="action_fd_encrypt_credentials" type="object" string="Encrypt / rewrap credentials"/>
-                    <p>External Testing refresh tokens normally expire after seven days. Production/internal authorization may still be revoked. Restrict the Picker browser API key to the staging/production origins and the Picker API.</p>
+                <page string="حالة التخزين">
+                    <group>
+                        <group>
+                            <field name="fd_health" string="حالة الاتصال" />
+                            <field name="fd_checked_at" string="آخر فحص" />
+                            <field name="fd_error_category" string="نوع المشكلة" />
+                            <field name="fd_quota_known" string="بيانات المساحة متاحة" />
+                            <field name="fd_quota_used" string="المساحة المستخدمة للحساب بالبايت" />
+                            <field name="fd_quota_limit" string="إجمالي مساحة الحساب بالبايت" />
+                        </group>
+                        <group>
+                            <field name="fd_blob_count" string="عدد الملفات المدارة" />
+                            <field name="fd_blob_bytes" string="حجم الملفات المدارة بالبايت" />
+                            <field name="fd_failed_jobs" string="مهام تحتاج إعادة محاولة" />
+                            <field name="fd_orphan_count" string="ملفات غير مرتبطة" />
+                            <field name="fd_reconcile_in_progress" string="مراجعة الملفات جارية" />
+                            <field name="fd_reconciled_at" string="آخر مراجعة للملفات" />
+                            <field name="fd_jobs_enabled" string="تشغيل مهام النقل" />
+                            <field name="fd_monitor_enabled" string="تشغيل مراقبة الاتصال" />
+                            <field name="fd_notify_user_id" string="مسؤول التنبيهات" />
+                        </group>
+                    </group>
+                    <p>المساحة المستخدمة تخص حساب جوجل بالكامل. حجم الملفات المدارة يخص الملفات المسجلة في الإضافة فقط.</p>
+                </page>
+                <page string="تنظيم الملفات والاستعادة">
+                    <group>
+                        <field name="fd_folder_layout" string="ترتيب مجلدات الملفات" />
+                        <field name="fd_retention_days" string="مدة الاحتفاظ قبل السماح بالنقل إلى المهملات بالأيام" />
+                    </group>
+                    <p>يحدد ترتيب المجلدات مكان الملفات الجديدة. تغيير الترتيب لا ينقل الملفات القديمة فورًا. الإضافة لا تحذف الملفات غير المرتبطة نهائيًا.</p>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">مساحة شركة مشتركة — اختياري</summary>
+                        <group>
+                            <field name="fd_shared_drive_id" string="معرّف مساحة الشركة المشتركة" />
+                            <field name="fd_shared_verified" string="تم التحقق من المساحة المشتركة" />
+                        </group>
+                        <p>تُستخدم فقط عند التخزين في مساحة مشتركة تابعة للشركة. اتركها فارغة عند استخدام مجلد في حسابك الشخصي.</p>
+                    </details>
+                </page>
+                <page string="الحماية والإعداد المتقدم" groups="base.group_system">
+                    <group>
+                        <field name="fd_oauth_lifecycle" string="وضع تصريح جوجل" />
+                        <field name="fd_encryption_state" string="حالة تشفير بيانات الربط" />
+                    </group>
+                    <button name="action_fd_encrypt_credentials" type="object" string="تشفير بيانات الربط أو تحديث مفاتيحها" />
+                    <p>قد ينتهي تصريح الاتصال بعد سبعة أيام أثناء اختبار تطبيق جوجل الخارجي. راجع حالة التشفير قبل التشغيل الفعلي، واحتفظ بنسخة آمنة من مفاتيح الاستعادة.</p>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">اختيار ملفات موجودة على درايف — إعداد اختياري</summary>
+                        <group>
+                            <field name="fd_picker_api_key" string="مفتاح واجهة اختيار الملفات" />
+                            <field name="fd_picker_app_id" string="رقم مشروع جوجل للاختيار" />
+                        </group>
+                        <p>مطلوب لفتح نافذة اختيار ملف موجود على درايف فقط. الرفع التلقائي من أودو لا يحتاج هذه الإعدادات. قيّد مفتاح الاختيار بعنوان النظام وواجهة اختيار الملفات.</p>
+                    </details>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">دليل الإعداد التقني وحفظ مفاتيح التشفير</summary>
+                        <ol>
+                            <li>Create a Google Cloud project and enable Drive API.</li>
+                            <li>Configure the consent screen and a Web OAuth client.</li>
+                            <li>Add the exact redirect URI shown on this connection.</li>
+                            <li>Save the client ID and secret, then use Connect Google with the limited file scope.</li>
+                            <li>Keep a dedicated folder; select a Shared Drive ID only when using that company's shared drive.</li>
+                            <li>Test folder access before allowing writes.</li>
+                            <li>Provide FASTEGY_DRIVE_SECRET_KEYS, or a private 0600 keys.json in ~/data/.fastegy-drive; keep a separate recovery copy and verify key persistence after rebuilding the host.</li>
+                            <li>Encrypt legacy credentials, audit model coverage, then test one image and one document.</li>
+                        </ol>
+                    </details>
                 </page>
             </xpath>
         </field>
