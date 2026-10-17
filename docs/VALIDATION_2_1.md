@@ -23,6 +23,8 @@ An isolated Installation record without a customer, assigned users or followers 
 
 Drive metadata matched the original names, MIME types and sizes. The note generated no notifications. A synthetic partner attachment outside the chosen application remained local. Two repeated discovery refreshes preserved the same inventory IDs. The 15-minute metadata cron was enabled, while old-file backfill remained disabled and no application migration snapshot existed for that connection.
 
+The native Odoo image viewer loaded the PNG at its original 2×2 dimensions. The authenticated Odoo content URL displayed the exact TXT content in a browser tab. The embedded TXT viewer was blank and the browser tool did not capture a download event, so embedded text preview and the download button are not accepted by this run; universal file preview is not claimed.
+
 The live connection retained its earlier manual routes. The independent integration cases establish that automatic routing works without manual model or field mappings. Runtime IDs, account details, tokens and evidence screenshots are kept outside this public repository.
 
 ## Limits
