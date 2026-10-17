@@ -216,6 +216,7 @@ class TestApplicationScope(TransactionCase):
         migration = self._scoped_backfill()
         migration._fd_scope_enqueue_batch()
         job = self.env["fastegy.drive.job"].search([("migration_id", "=", migration.id)])
+        self.assertEqual(len(job), 1)
         old_generation = self.storage._fd_scope_generation()
         with patch.object(type(self.storage), "_fd_scope_descriptors", return_value=self._descriptors(shared=True)):
             self.storage.action_fd_scope_refresh()
@@ -223,6 +224,13 @@ class TestApplicationScope(TransactionCase):
         job.action_run()
         self.assertEqual(job.state, "cancelled")
         self.assertNotIn("://", attachment.store_fname)
+
+    def test_snapshot_includes_files_created_in_the_same_transaction(self):
+        attachment = self._attachment(local=True)
+        migration = self._scoped_backfill()
+        self.assertEqual(len(migration), 1)
+        self.assertGreaterEqual(migration.preview_at, attachment.write_date)
+        self.assertIn(attachment, self.env["ir.attachment"].search(migration._domain()))
 
     def test_transfer_rejects_large_source_before_reading_its_binary(self):
         attachment = self.env["ir.attachment"].with_context(storage_location="file").create({

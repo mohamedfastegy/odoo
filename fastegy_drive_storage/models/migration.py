@@ -124,7 +124,9 @@ class DriveMigration(models.Model):
         domain = self._domain(frozen=False)
         top = attachments.search(domain, order="id desc", limit=1)
         summary = attachments.read_group(domain, ["file_size:sum"], [])
-        self.write({"preview_at": fields.Datetime.now(), "max_attachment_id": top.id or 0,
+        # ORM write_date uses the cursor timestamp, including microseconds.
+        # A second-truncated wall clock can exclude files created in this transaction.
+        self.write({"preview_at": self.env.cr.now(), "max_attachment_id": top.id or 0,
                     "preview_count": attachments.search_count(domain),
                     "preview_bytes": summary[0].get("file_size", 0) if summary else 0,
                     "state": "ready"})
