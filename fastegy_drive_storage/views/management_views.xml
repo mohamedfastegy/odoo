@@ -50,7 +50,7 @@
                         <p>تُستخدم فقط عند التخزين في مساحة مشتركة تابعة للشركة. اتركها فارغة عند استخدام مجلد في حسابك الشخصي.</p>
                     </details>
                 </page>
-                <page string="الحماية والإعداد المتقدم" groups="base.group_system">
+                <page name="fd_advanced_settings" string="الحماية والإعداد المتقدم" groups="base.group_system">
                     <group>
                         <field name="fd_oauth_lifecycle" string="وضع تصريح جوجل" />
                         <field name="fd_encryption_state" string="حالة تشفير بيانات الربط" />
@@ -79,6 +79,9 @@
                         </ol>
                     </details>
                 </page>
+            </xpath>
+            <xpath expr="//page[@name='fd_advanced_settings']" position="inside">
+                <xpath expr="//page[@name='fd_manual_routes']/details" position="move"/>
             </xpath>
         </field>
     </record>
