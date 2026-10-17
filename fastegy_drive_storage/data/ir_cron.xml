@@ -1,0 +1,27 @@
+<odoo noupdate="1">
+    <record id="cron_drive_migration" model="ir.cron">
+        <field name="name">FastEgy Drive — one migration batch</field>
+        <field name="model_id" ref="model_fastegy_drive_migration"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_run_batches()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="active" eval="False"/>
+    </record>
+    <record id="cron_drive_jobs" model="ir.cron">
+        <field name="name">FastEgy Drive — independent tasks</field>
+        <field name="model_id" ref="model_fastegy_drive_job"/>
+        <field name="state">code</field><field name="code">model._cron_process()</field>
+        <field name="interval_number">2</field><field name="interval_type">minutes</field>
+        <field name="user_id" ref="base.user_root"/><field name="active" eval="False"/>
+    </record>
+    <record id="cron_drive_health" model="ir.cron">
+        <field name="name">FastEgy Drive — health and retention of audit logs</field>
+        <field name="model_id" ref="fs_storage.model_fs_storage"/>
+        <field name="state">code</field><field name="code">model._cron_health()</field>
+        <field name="interval_number">30</field><field name="interval_type">minutes</field>
+        <field name="user_id" ref="base.user_root"/><field name="active" eval="False"/>
+    </record>
+</odoo>
+

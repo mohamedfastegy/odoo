@@ -1,0 +1,10 @@
+<odoo>
+    <template id="portal_drive_files" name="Private Drive files">
+        <t t-call="portal.portal_layout"><div class="container py-4">
+            <h2>الملفات المتاحة لك</h2>
+            <p t-if="not shares">لا توجد ملفات مشتركة سارية لهذا الحساب.</p>
+            <ul><t t-foreach="shares" t-as="share"><li><a t-att-href="share.url"><t t-out="share.name"/></a>
+                <span> — تنتهي في </span><span t-field="share.expires_at"/></li></t></ul>
+        </div></t>
+    </template>
+</odoo>

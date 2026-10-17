@@ -1,0 +1,68 @@
+<odoo>
+    <record id="view_drive_migration_list" model="ir.ui.view">
+        <field name="name">fastegy.drive.migration.list</field>
+        <field name="model">fastegy.drive.migration</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="model_id"/>
+                <field name="direction"/>
+                <field name="preview_count"/>
+                <field name="moved_count"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_drive_migration_form" model="ir.ui.view">
+        <field name="name">fastegy.drive.migration.form</field>
+        <field name="model">fastegy.drive.migration</field>
+        <field name="arch" type="xml">
+            <form string="Scoped file migration">
+                <header>
+                    <button name="action_preview" type="object" string="Preview only" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_run_batch" type="object" string="Run one batch" class="btn-primary" invisible="state not in ['ready', 'running']" confirm="This moves only the next scoped batch and verifies its content. Start with one file."/>
+                    <button name="action_resume" type="object" string="Resume" invisible="state not in ['paused', 'error']"/>
+                    <button name="action_pause" type="object" string="Pause" invisible="state != 'running'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,ready,running,done"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        المعاينة لا تنقل ملفات. كل دفعة تُراجع المحتوى قبل اعتماد المرجع الجديد.
+                        تنظيف الملفات المحلية المؤجلة يتم بآلية أودو المعتادة؛ عدد البايتات هنا ليس قياسًا للمساحة المحررة فعليًا.
+                    </div>
+                    <group>
+                        <field name="name"/>
+                        <field name="storage_id" readonly="state != 'draft'"/>
+                        <field name="direction" readonly="state != 'draft'"/>
+                        <field name="model_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                        <field name="field_id" readonly="state != 'draft'" options="{'no_create': True}"/>
+                        <field name="include_field_attachments" invisible="field_id" readonly="state != 'draft'"/>
+                        <field name="record_id" readonly="state != 'draft'"/>
+                        <field name="batch_size" readonly="state != 'draft'"/>
+                    </group>
+                    <group string="Preview snapshot">
+                        <field name="preview_at"/>
+                        <field name="preview_count"/>
+                        <field name="preview_bytes"/>
+                        <field name="max_attachment_id"/>
+                    </group>
+                    <group string="Progress">
+                        <field name="moved_count"/>
+                        <field name="skipped_count"/>
+                        <field name="moved_bytes"/>
+                        <field name="last_attachment_id"/>
+                        <field name="error_attachment_id" invisible="not error_attachment_id"/>
+                        <field name="error_message" invisible="not error_message"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_drive_migration" model="ir.actions.act_window">
+        <field name="name">Migration trials</field>
+        <field name="res_model">fastegy.drive.migration</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="menu_drive_migration" name="Migration trials" parent="menu_drive_root" action="action_drive_migration" sequence="20"/>
+</odoo>
+

@@ -1,0 +1,7 @@
+# Add to the Odoo.sh project's requirements.txt, after reviewing existing pins.
+fsspec==2025.3.0
+# requests is supplied and pinned by Odoo itself; do not override its core pin.
+python-slugify>=8,<9
+
+
+cryptography>=42,<47

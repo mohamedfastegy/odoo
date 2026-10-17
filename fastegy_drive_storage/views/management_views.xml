@@ -1,0 +1,132 @@
+<odoo>
+    <record id="view_drive_storage_management" model="ir.ui.view">
+        <field name="name">fastegy.drive.storage.management</field><field name="model">fs.storage</field>
+        <field name="inherit_id" ref="view_drive_storage_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_fd_health" type="object" string="Refresh health"/>
+                <button name="action_fd_files" type="object" string="Managed files"/>
+                <button name="action_fd_reconcile" type="object" string="Reconcile next batch" confirm="Read the next bounded metadata batch and compare the registry. No cloud file will be deleted."/>
+                <button name="action_fd_manifest" type="object" string="Export recovery manifest"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Health and operations"><group>
+                    <group><field name="fd_health"/><field name="fd_checked_at"/><field name="fd_error_category"/>
+                        <field name="fd_quota_known"/><field name="fd_quota_used"/><field name="fd_quota_limit"/></group>
+                    <group><field name="fd_blob_count"/><field name="fd_blob_bytes"/><field name="fd_failed_jobs"/>
+                        <field name="fd_orphan_count"/><field name="fd_reconcile_in_progress"/><field name="fd_reconciled_at"/>
+                        <field name="fd_jobs_enabled"/><field name="fd_monitor_enabled"/>
+                        <field name="fd_notify_user_id"/></group>
+                </group><p>Quota is account-wide. Managed bytes count registry entries, not the whole account. Activate the corresponding scheduled actions after testing.</p></page>
+                <page string="Folders and recovery"><group>
+                    <field name="fd_folder_layout"/><field name="fd_shared_drive_id"/><field name="fd_shared_verified"/>
+                    <field name="fd_retention_days"/>
+                </group><p>New presentation folders use company/model/record/field identifiers. Existing files move only when their metadata is repaired. Unreferenced files are never permanently deleted by this addon.</p></page>
+                <page string="Setup guide and secrets" groups="base.group_system">
+                    <ol>
+                        <li>Create a Google Cloud project and enable Drive API.</li>
+                        <li>Configure the consent screen and a Web OAuth client.</li>
+                        <li>Add the exact redirect URI shown on this connection.</li>
+                        <li>Save the client ID and secret, then use Connect Google with the limited file scope.</li>
+                        <li>Keep a dedicated folder; select a Shared Drive ID only when using that company's shared drive.</li>
+                        <li>Test folder access before allowing writes.</li>
+                        <li>Provide FASTEGY_DRIVE_SECRET_KEYS, or a private 0600 keys.json in ~/data/.fastegy-drive; keep a separate recovery copy and verify key persistence after rebuilding the host.</li>
+                        <li>Encrypt legacy credentials, audit model coverage, then test one image and one document.</li>
+                    </ol>
+                    <group><field name="fd_oauth_lifecycle"/><field name="fd_encryption_state"/>
+                        <field name="fd_picker_api_key"/><field name="fd_picker_app_id"/></group>
+                    <button name="action_fd_encrypt_credentials" type="object" string="Encrypt / rewrap credentials"/>
+                    <p>External Testing refresh tokens normally expire after seven days. Production/internal authorization may still be revoked. Restrict the Picker browser API key to the staging/production origins and the Picker API.</p>
+                </page>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_drive_dashboard" model="ir.ui.view"><field name="name">fastegy.drive.dashboard</field><field name="model">fs.storage</field>
+        <field name="arch" type="xml"><kanban create="false"><templates><t t-name="card">
+            <strong><field name="name"/></strong><div><field name="fd_health"/></div>
+            <div>Referenced files: <field name="fd_blob_count"/></div><div>Managed bytes: <field name="fd_blob_bytes"/></div>
+            <div>Failed/retry tasks: <field name="fd_failed_jobs"/></div><div>Unreferenced: <field name="fd_orphan_count"/></div>
+            <div>Last health check: <field name="fd_checked_at"/></div>
+        </t></templates></kanban></field></record>
+    <record id="action_drive_dashboard" model="ir.actions.act_window"><field name="name">Storage health</field><field name="res_model">fs.storage</field>
+        <field name="view_mode">kanban,list,form</field><field name="view_id" ref="view_drive_dashboard"/>
+        <field name="domain">[('protocol','=','fastegy_gdrive')]</field></record>
+    <record id="dashboard_form_binding" model="ir.actions.act_window.view"><field name="sequence">2</field><field name="view_mode">form</field><field name="view_id" ref="view_drive_storage_form"/><field name="act_window_id" ref="action_drive_dashboard"/></record>
+    <record id="dashboard_kanban_binding" model="ir.actions.act_window.view"><field name="sequence">1</field><field name="view_mode">kanban</field><field name="view_id" ref="view_drive_dashboard"/><field name="act_window_id" ref="action_drive_dashboard"/></record>
+    <record id="view_fd_blob_list" model="ir.ui.view"><field name="name">fastegy.drive.blob.list</field><field name="model">fastegy.drive.blob</field>
+        <field name="arch" type="xml"><list create="false" delete="false" decoration-danger="state == 'missing'" decoration-muted="state == 'trashed'">
+            <field name="name"/><field name="storage_id"/><field name="res_model"/><field name="res_id"/><field name="res_field"/>
+            <field name="mimetype"/><field name="size" sum="Bytes"/><field name="state"/><field name="checked_at"/>
+            <button name="action_download" type="object" string="Download" invisible="state in ('missing','trashed')"/>
+        </list></field></record>
+    <record id="view_fd_blob_form" model="ir.ui.view"><field name="name">fastegy.drive.blob.form</field><field name="model">fastegy.drive.blob</field>
+        <field name="arch" type="xml"><form create="false" edit="false" delete="false"><header>
+            <button name="action_reconcile" type="object" string="Check reference"/>
+            <button name="action_download" type="object" string="Download" invisible="state in ('missing','trashed')"/>
+            <button name="action_open_record" type="object" string="Open original record"/>
+            <button name="action_trash" type="object" string="Move to Drive trash" invisible="state != 'orphan'" confirm="Only an unreferenced file past the retention period can be moved to trash. Continue?"/>
+            <button name="action_restore" type="object" string="Restore from trash" invisible="state != 'trashed'"/>
+            <button name="action_restore_version" type="object" string="Restore this version" invisible="state != 'orphan'" confirm="Replace the attachment content with this previous version? The current version will remain in retention."/>
+        </header><sheet><group readonly="1"><field name="name"/><field name="storage_id"/><field name="state"/><field name="path"/><field name="file_id"/>
+            <field name="attachment_id"/><field name="res_model"/><field name="res_id"/><field name="res_field"/><field name="mimetype"/><field name="size"/>
+            <field name="checksum"/><field name="md5"/><field name="checked_at"/><field name="orphan_since"/></group></sheet></form></field></record>
+    <record id="action_fd_blobs" model="ir.actions.act_window"><field name="name">Files and recovery</field><field name="res_model">fastegy.drive.blob</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_job_list" model="ir.ui.view"><field name="name">fastegy.drive.job.list</field><field name="model">fastegy.drive.job</field><field name="arch" type="xml">
+        <list create="false" delete="false" decoration-danger="state == 'failed'"><field name="storage_id"/><field name="attachment_id"/><field name="kind"/>
+            <field name="state"/><field name="attempts"/><field name="next_attempt"/><field name="error_category"/>
+            <button name="action_run" type="object" string="Run" invisible="state not in ('pending','retry')"/>
+            <button name="action_retry" type="object" string="Retry" invisible="state not in ('failed','retry')"/></list></field></record>
+    <record id="view_fd_job_form" model="ir.ui.view"><field name="name">fastegy.drive.job.form</field><field name="model">fastegy.drive.job</field><field name="arch" type="xml">
+        <form create="false" delete="false"><header><button name="action_run" type="object" string="Run"/><button name="action_retry" type="object" string="Retry"/>
+            <button name="action_cancel" type="object" string="Cancel"/></header><sheet><group><field name="storage_id" readonly="1"/>
+            <field name="attachment_id" readonly="1"/><field name="kind" readonly="1"/><field name="migration_id" readonly="1"/><field name="expected_checksum" readonly="1"/>
+            <field name="state" readonly="1"/><field name="attempts"/><field name="max_attempts"/><field name="next_attempt"/>
+            <field name="error_category"/><field name="completed_at"/></group></sheet></form></field></record>
+    <record id="action_fd_jobs" model="ir.actions.act_window"><field name="name">Transfer queue</field><field name="res_model">fastegy.drive.job</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_event_list" model="ir.ui.view"><field name="name">fastegy.drive.event.list</field><field name="model">fastegy.drive.event</field><field name="arch" type="xml">
+        <list create="false" edit="false" delete="false"><field name="create_date"/><field name="storage_id"/><field name="operation"/><field name="outcome"/>
+            <field name="category"/><field name="attachment_id"/><field name="byte_count" sum="Bytes"/><field name="actor_id"/></list></field></record>
+    <record id="action_fd_events" model="ir.actions.act_window"><field name="name">Operation audit</field><field name="res_model">fastegy.drive.event</field><field name="view_mode">list</field></record>
+    <record id="view_fd_rule_list" model="ir.ui.view"><field name="name">fastegy.drive.rule.list</field><field name="model">fastegy.drive.rule</field><field name="arch" type="xml">
+        <list><field name="sequence" widget="handle"/><field name="name"/><field name="model_id"/><field name="field_id"/><field name="company_id"/>
+            <field name="mode"/><field name="storage_id"/><field name="mime_patterns"/><field name="active"/></list></field></record>
+    <record id="view_fd_rule_form" model="ir.ui.view"><field name="name">fastegy.drive.rule.form</field><field name="model">fastegy.drive.rule</field><field name="arch" type="xml">
+        <form><header><button name="action_test_rule" type="object" string="Preview this rule"/></header><sheet><group><field name="name"/><field name="active"/><field name="sequence"/><field name="model_id"/><field name="field_id"/>
+            <field name="company_id"/><field name="mode"/><field name="storage_id"/><field name="mime_patterns"/><field name="minimum_bytes"/>
+            <field name="maximum_bytes"/><field name="record_domain"/><field name="test_record_id"/><field name="test_mimetype"/><field name="test_size"/><field name="test_result"/></group></sheet></form></field></record>
+    <record id="action_fd_rules" model="ir.actions.act_window"><field name="name">Routing rules</field><field name="res_model">fastegy.drive.rule</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_coverage_list" model="ir.ui.view"><field name="name">fastegy.drive.coverage.list</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
+        <list><field name="name"/><field name="scanned_at"/><field name="attachment_fields"/><field name="direct_fields"/><field name="computed_fields"/></list></field></record>
+    <record id="view_fd_coverage_form" model="ir.ui.view"><field name="name">fastegy.drive.coverage.form</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
+        <form><header><button name="action_scan" type="object" string="Scan actual field definitions" class="btn-primary"/>
+            <button name="action_export" type="object" string="Export audit"/></header><sheet><group><field name="name"/><field name="model_ids" widget="many2many_tags"/>
+            <field name="scanned_at"/><field name="attachment_fields"/><field name="direct_fields"/><field name="computed_fields"/></group><field name="explanation"/>
+            <field name="line_ids"><list create="false" delete="false" decoration-danger="status == 'column'">
+                <field name="model_name"/><field name="field_name"/><field name="label"/><field name="status"/><field name="storage_code"/></list></field></sheet></form></field></record>
+    <record id="action_fd_coverage" model="ir.actions.act_window"><field name="name">File coverage audit</field><field name="res_model">fastegy.drive.coverage</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_import_form" model="ir.ui.view"><field name="name">fastegy.drive.import.form</field><field name="model">fastegy.drive.import</field><field name="arch" type="xml">
+        <form><sheet><p>Select a binary file authorized to this application. Choose a private shortcut to existing bytes or an independent copy. A shortcut stops working if the original changes, is deleted, or access is revoked. No permanent local copy is kept.</p>
+            <group><field name="storage_id"/><field name="model_id"/><field name="record_id"/><field name="drive_file_id"/><field name="mode"/><field name="name"/><field name="attachment_id"/></group>
+            <button name="action_picker" type="object" string="Choose with Google Picker"/>
+            <button name="action_import" type="object" string="Attach selected file" class="btn-primary"/></sheet></form></field></record>
+    <record id="action_drive_import" model="ir.actions.act_window"><field name="name">Attach existing Drive file</field><field name="res_model">fastegy.drive.import</field><field name="view_mode">form</field></record>
+    <record id="view_fd_share_list" model="ir.ui.view"><field name="name">fastegy.drive.share.list</field><field name="model">fastegy.drive.share</field><field name="arch" type="xml">
+        <list><field name="name"/><field name="partner_id"/><field name="expires_at"/><field name="active"/></list></field></record>
+    <record id="view_fd_share_form" model="ir.ui.view"><field name="name">fastegy.drive.share.form</field><field name="model">fastegy.drive.share</field><field name="arch" type="xml">
+        <form><header><button name="action_revoke" type="object" string="Revoke"/></header><sheet><p>Grants this exact logged-in contact read access to the selected file until expiry. It grants no record access and sends no message.</p>
+            <group><field name="attachment_id"/><field name="partner_id"/><field name="expires_at"/><field name="active"/><field name="url" widget="url"/></group></sheet></form></field></record>
+    <record id="action_fd_shares" model="ir.actions.act_window"><field name="name">Private portal access</field><field name="res_model">fastegy.drive.share</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_migration_queue" model="ir.ui.view"><field name="name">fastegy.drive.migration.queue</field><field name="model">fastegy.drive.migration</field>
+        <field name="inherit_id" ref="view_drive_migration_form"/><field name="arch" type="xml">
+            <xpath expr="//header" position="inside"><button name="action_enqueue_batch" type="object" string="Queue next 500 files independently" invisible="state not in ('ready','running')"/></xpath>
+            <xpath expr="//sheet" position="inside"><group string="Independent transfer tasks"><field name="queued_count"/><p>Queued means scheduled, not transferred. Review each task in Transfer queue; failure of one task does not stop the others.</p></group></xpath>
+        </field></record>
+    <menuitem id="menu_fd_dashboard" name="Health dashboard" parent="menu_drive_root" action="action_drive_dashboard" sequence="1"/>
+    <menuitem id="menu_fd_blobs" name="Files and recovery" parent="menu_drive_root" action="action_fd_blobs" sequence="20"/>
+    <menuitem id="menu_fd_jobs" name="Transfer queue" parent="menu_drive_root" action="action_fd_jobs" sequence="30"/>
+    <menuitem id="menu_fd_events" name="Operation audit" parent="menu_drive_root" action="action_fd_events" sequence="40"/>
+    <menuitem id="menu_fd_rules" name="Routing rules" parent="menu_drive_root" action="action_fd_rules" sequence="50"/>
+    <menuitem id="menu_fd_coverage" name="Coverage audit" parent="menu_drive_root" action="action_fd_coverage" sequence="60"/>
+    <menuitem id="menu_fd_import" name="Attach existing Drive file" parent="menu_drive_root" action="action_drive_import" sequence="70"/>
+    <menuitem id="menu_fd_shares" name="Private portal access" parent="menu_drive_root" action="action_fd_shares" sequence="80"/>
+</odoo>
