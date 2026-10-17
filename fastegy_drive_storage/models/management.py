@@ -91,6 +91,10 @@ class DriveManagement(models.Model):
     fd_error_category = fields.Char(readonly=True)
     fd_quota_used = fields.Float(readonly=True, string="Account bytes used")
     fd_quota_limit = fields.Float(readonly=True, string="Account byte limit")
+    fd_quota_used_mb = fields.Float(string="المساحة المستخدمة للحساب بالميجابايت",
+        compute="_compute_fd_quota_mb", digits=(16, 0), help="الميجابايت يساوي مليون بايت؛ القيمة مقربة لأقرب عدد صحيح.")
+    fd_quota_limit_mb = fields.Float(string="إجمالي مساحة الحساب بالميجابايت",
+        compute="_compute_fd_quota_mb", digits=(16, 0), help="الميجابايت يساوي مليون بايت؛ القيمة مقربة لأقرب عدد صحيح.")
     fd_quota_known = fields.Boolean(readonly=True)
     fd_shared_verified = fields.Boolean(readonly=True)
     fd_encryption_state = fields.Char(compute="_compute_fd_encryption_state", groups="base.group_system")
@@ -107,6 +111,13 @@ class DriveManagement(models.Model):
     fd_reconcile_remote_done = fields.Boolean(copy=False)
     fd_reconcile_in_progress = fields.Boolean(copy=False, readonly=True)
     fd_reconciled_at = fields.Datetime(copy=False, readonly=True)
+
+    @api.depends("fd_quota_used", "fd_quota_limit")
+    def _compute_fd_quota_mb(self):
+        # نغيّر وحدة العرض فقط، ونحتفظ بقيم البايت الأصلية للفحص والحسابات.
+        for storage in self:
+            storage.fd_quota_used_mb = int(storage.fd_quota_used / 1_000_000 + 0.5)
+            storage.fd_quota_limit_mb = int(storage.fd_quota_limit / 1_000_000 + 0.5)
 
     @api.depends("fd_refresh_token", "fd_client_secret")
     def _compute_fd_encryption_state(self):

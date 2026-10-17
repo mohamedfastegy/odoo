@@ -18,8 +18,8 @@
                             <field name="fd_checked_at" string="آخر فحص" />
                             <field name="fd_error_category" string="نوع المشكلة" />
                             <field name="fd_quota_known" string="بيانات المساحة متاحة" />
-                            <field name="fd_quota_used" string="المساحة المستخدمة للحساب بالبايت" />
-                            <field name="fd_quota_limit" string="إجمالي مساحة الحساب بالبايت" />
+                            <field name="fd_quota_used_mb" string="المساحة المستخدمة للحساب بالميجابايت" />
+                            <field name="fd_quota_limit_mb" string="إجمالي مساحة الحساب بالميجابايت" />
                         </group>
                         <group>
                             <field name="fd_blob_count" string="عدد الملفات المدارة" />
