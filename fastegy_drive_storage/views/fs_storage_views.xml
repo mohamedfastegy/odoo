@@ -56,7 +56,7 @@
                         <field name="fd_max_file_mb"/>
                     </group>
                     <notebook>
-                        <page string="Models and fields">
+                        <page string="Models and fields" name="fd_manual_routes">
                             <p>اختر الموديلات أو الحقول بعد نجاح اختبار الاتصال. قاعدة الحقل لها الأولوية.</p>
                             <group>
                                 <field name="model_ids" widget="many2many" options="{'no_create': True}">

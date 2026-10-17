@@ -5,4 +5,5 @@ from . import operations
 from . import management
 from . import coverage
 from . import import_share
+from . import scope
 

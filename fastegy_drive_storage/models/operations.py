@@ -224,9 +224,15 @@ class DriveJob(models.Model):
                         target = job.storage_id.code if job.kind == "to_drive" else "file"
                         if job.kind == "to_drive" and (job.storage_id.fd_readonly or not job.storage_id.fd_allow_writes):
                             raise PermissionError("Uploads are disabled")
-                        data = attachment.with_context(bin_size=False).raw
-                        if len(data) > job.storage_id.fd_max_file_mb * 1048576:
+                        limit = job.storage_id.fd_max_file_mb * 1048576
+                        if attachment.file_size > limit:
                             raise ValueError("File exceeds configured limit")
+                        data = attachment.with_context(bin_size=False).raw
+                        if len(data) > limit:
+                            raise ValueError("File exceeds configured limit")
+                        if len(data) != attachment.file_size or (attachment.checksum
+                                and hashlib.sha1(data).hexdigest() != attachment.checksum):
+                            raise ValueError("Source content failed integrity verification")
                         already_there = (attachment.store_fname or "").startswith(target + "://") if job.kind == "to_drive" else "://" not in (attachment.store_fname or "")
                         if not already_there:
                             fixed_path = uuid.uuid5(uuid.UUID(job.storage_id.fd_namespace),
@@ -250,10 +256,14 @@ class DriveJob(models.Model):
         return True
 
     @api.model
-    def _cron_process(self, limit=10):
+    def _cron_process(self, limit=10, scope_only=False):
         # معاملة منفصلة لكل مهمة؛ تعطل العامل لا يلغي نجاح المهام السابقة.
-        ids = self.sudo().search([("state", "in", ["pending", "retry"]),
-            ("next_attempt", "<=", fields.Datetime.now()), ("storage_id.fd_jobs_enabled", "=", True)], limit=limit).ids
+        domain = [("state", "in", ["pending", "retry"]), ("next_attempt", "<=", fields.Datetime.now())]
+        if scope_only:
+            domain += [("migration_id.fd_scope_storage_id", "!=", False)]
+        else:
+            domain += [("storage_id.fd_jobs_enabled", "=", True)]
+        ids = self.sudo().search(domain, limit=limit).ids
         for job_id in ids:
             with self.env.registry.cursor() as cr:
                 env = api.Environment(cr, SUPERUSER_ID, {})

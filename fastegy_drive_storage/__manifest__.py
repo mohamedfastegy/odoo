@@ -1,7 +1,7 @@
 {
     "name": "FastEgy Google Drive Storage",
-    "version": "18.0.0.2.0",
-    "summary": "Private storage, recovery manifest, job queue, health, routing and coverage audit",
+    "version": "18.0.0.2.1",
+    "summary": "Automatic application discovery, private Drive storage, routing and recovery",
     "author": "FastEgy",
     "license": "AGPL-3",
     "category": "Administration",
@@ -12,6 +12,7 @@
         "views/fs_storage_views.xml",
         "views/migration_views.xml",
         "views/management_views.xml",
+        "views/scope_views.xml",
         "views/portal_templates.xml",
         "data/ir_cron.xml",
     ],

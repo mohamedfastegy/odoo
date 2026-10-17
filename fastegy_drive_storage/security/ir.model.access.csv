@@ -8,4 +8,5 @@ access_fd_coverage_admin,Drive coverage audits,model_fastegy_drive_coverage,base
 access_fd_coverage_line_admin,Drive coverage fields,model_fastegy_drive_coverage_line,base.group_system,1,1,1,1
 access_fd_import_admin,Drive existing file import,model_fastegy_drive_import,base.group_system,1,1,1,1
 access_fd_share_admin,Drive private sharing,model_fastegy_drive_share,base.group_system,1,1,1,1
+access_fd_scope_line_admin,Application discovery report,model_fastegy_drive_scope_line,base.group_system,1,0,0,0
 

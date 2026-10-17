@@ -23,5 +23,19 @@
         <field name="interval_number">30</field><field name="interval_type">minutes</field>
         <field name="user_id" ref="base.user_root"/><field name="active" eval="False"/>
     </record>
+    <record id="cron_drive_scope" model="ir.cron">
+        <field name="name">FastEgy Drive — application discovery and backfill snapshots</field>
+        <field name="model_id" ref="fs_storage.model_fs_storage"/>
+        <field name="state">code</field><field name="code">model._cron_fd_scope()</field>
+        <field name="interval_number">15</field><field name="interval_type">minutes</field>
+        <field name="user_id" ref="base.user_root"/><field name="active" eval="False"/>
+    </record>
+    <record id="cron_drive_scope_jobs" model="ir.cron">
+        <field name="name">FastEgy Drive — opted-in application backfill tasks</field>
+        <field name="model_id" ref="model_fastegy_drive_job"/>
+        <field name="state">code</field><field name="code">model._cron_fd_scope_jobs()</field>
+        <field name="interval_number">2</field><field name="interval_type">minutes</field>
+        <field name="user_id" ref="base.user_root"/><field name="active" eval="False"/>
+    </record>
 </odoo>
 

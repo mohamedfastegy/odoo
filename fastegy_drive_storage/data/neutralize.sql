@@ -12,5 +12,10 @@ BEGIN
     IF to_regclass('public.fastegy_drive_share') IS NOT NULL THEN
         UPDATE fastegy_drive_share SET active = false;
     END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'fs_storage' AND column_name = 'fd_scope_active') THEN
+        UPDATE fs_storage SET fd_scope_active = false, fd_scope_backfill_applied = false
+        WHERE protocol = 'fastegy_gdrive';
+    END IF;
 END;
 $$;
