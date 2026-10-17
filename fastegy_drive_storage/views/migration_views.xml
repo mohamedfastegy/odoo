@@ -4,65 +4,70 @@
         <field name="model">fastegy.drive.migration</field>
         <field name="arch" type="xml">
             <list>
-                <field name="name"/>
-                <field name="model_id"/>
-                <field name="direction"/>
-                <field name="preview_count"/>
-                <field name="moved_count"/>
-                <field name="state"/>
+                <field name="name" string="الاسم"/>
+                <field name="model_id" string="الموديل"/>
+                <field name="direction" string="اتجاه النقل"/>
+                <field name="preview_count" string="عدد الملفات المرشحة"/>
+                <field name="moved_count" string="عدد الملفات المنقولة"/>
+                <field name="state" string="الحالة"/>
             </list>
         </field>
     </record>
     <record id="view_drive_migration_form" model="ir.ui.view">
-        <field name="name">fastegy.drive.migration.form</field>
-        <field name="model">fastegy.drive.migration</field>
-        <field name="arch" type="xml">
-            <form string="Scoped file migration">
-                <header>
-                    <button name="action_preview" type="object" string="Preview only" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_run_batch" type="object" string="Run one batch" class="btn-primary" invisible="state not in ['ready', 'running']" confirm="This moves only the next scoped batch and verifies its content. Start with one file."/>
-                    <button name="action_resume" type="object" string="Resume" invisible="state not in ['paused', 'error']"/>
-                    <button name="action_pause" type="object" string="Pause" invisible="state != 'running'"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,ready,running,done"/>
-                </header>
-                <sheet>
-                    <div class="alert alert-info" role="alert">
+    <field name="name">fastegy.drive.migration.form</field>
+    <field name="model">fastegy.drive.migration</field>
+    <field name="arch" type="xml">
+        <form string="نقل ملفات ضمن نطاق محدد">
+            <header>
+                <button name="action_preview" type="object" string="معاينة فقط" class="btn-primary" invisible="state != 'draft'" />
+                <button name="action_run_batch" type="object" string="تشغيل دفعة واحدة" class="btn-primary" invisible="state not in ['ready', 'running']" confirm="سيتم نقل الدفعة التالية فقط ضمن النطاق المحدد مع التحقق من المحتوى. ابدأ بملف واحد." />
+                <button name="action_resume" type="object" string="استكمال" invisible="state not in ['paused', 'error']" />
+                <button name="action_pause" type="object" string="إيقاف مؤقت" invisible="state != 'running'" />
+                <field name="state" string="الحالة" widget="statusbar" statusbar_visible="draft,ready,running,done" />
+            </header>
+            <sheet>
+                <div class="alert alert-info" role="alert">
                         المعاينة لا تنقل ملفات. كل دفعة تُراجع المحتوى قبل اعتماد المرجع الجديد.
                         تنظيف الملفات المحلية المؤجلة يتم بآلية أودو المعتادة؛ عدد البايتات هنا ليس قياسًا للمساحة المحررة فعليًا.
                     </div>
+                <group>
+                    <field name="name" string="الاسم" />
+                    <field name="storage_id" string="اتصال التخزين" readonly="state != 'draft'" />
+                    <field name="direction" string="اتجاه النقل" readonly="state != 'draft'" />
+                    <field name="model_id" string="الموديل" readonly="state != 'draft'" options="{'no_create': True}" />
+                    <field name="field_id" string="حقل الملف" readonly="state != 'draft'" options="{'no_create': True}" />
+                    <field name="include_field_attachments" string="تضمين مرفقات الحقول" invisible="field_id" readonly="state != 'draft'" />
+                    <field name="record_id" string="رقم السجل" readonly="state != 'draft'" />
+                    <field name="batch_size" string="عدد الملفات في الدفعة" readonly="state != 'draft'" />
+                </group>
+                <group string="نتيجة المعاينة">
+                    <field name="preview_at" string="وقت المعاينة" />
+                    <field name="preview_count" string="عدد الملفات المرشحة" />
+                    <field name="preview_bytes" string="حجم الملفات المرشحة بالبايت" />
+                </group>
+                <group string="تقدم التنفيذ">
+                    <field name="moved_count" string="عدد الملفات المنقولة" />
+                    <field name="skipped_count" string="ملفات تغيّرت بعد المعاينة" />
+                    <field name="moved_bytes" string="الحجم المتحقق والمنقول بالبايت" />
+                    <field name="error_attachment_id" string="معرّف المرفق المتعثر" invisible="not error_attachment_id" />
+                    <field name="error_message" string="تفاصيل المشكلة" invisible="not error_message" />
+                </group>
+                <details class="mt-3 mb-3">
+                    <summary class="fw-bold mb-3">مؤشرات تتبع النقل — متقدم</summary>
                     <group>
-                        <field name="name"/>
-                        <field name="storage_id" readonly="state != 'draft'"/>
-                        <field name="direction" readonly="state != 'draft'"/>
-                        <field name="model_id" readonly="state != 'draft'" options="{'no_create': True}"/>
-                        <field name="field_id" readonly="state != 'draft'" options="{'no_create': True}"/>
-                        <field name="include_field_attachments" invisible="field_id" readonly="state != 'draft'"/>
-                        <field name="record_id" readonly="state != 'draft'"/>
-                        <field name="batch_size" readonly="state != 'draft'"/>
+                        <field name="max_attachment_id" string="آخر معرّف ضمن المعاينة" />
+                        <field name="last_attachment_id" string="آخر معرّف تمت معالجته" />
                     </group>
-                    <group string="Preview snapshot">
-                        <field name="preview_at"/>
-                        <field name="preview_count"/>
-                        <field name="preview_bytes"/>
-                        <field name="max_attachment_id"/>
-                    </group>
-                    <group string="Progress">
-                        <field name="moved_count"/>
-                        <field name="skipped_count"/>
-                        <field name="moved_bytes"/>
-                        <field name="last_attachment_id"/>
-                        <field name="error_attachment_id" invisible="not error_attachment_id"/>
-                        <field name="error_message" invisible="not error_message"/>
-                    </group>
-                </sheet>
-            </form>
-        </field>
-    </record>
+                </details>
+            </sheet>
+        </form>
+    </field>
+</record>
     <record id="action_drive_migration" model="ir.actions.act_window">
-        <field name="name">Migration trials</field>
+        <field name="name">نقل الملفات واستعادتها</field>
         <field name="res_model">fastegy.drive.migration</field>
         <field name="view_mode">list,form</field>
     </record>
-    <menuitem id="menu_drive_migration" name="Migration trials" parent="menu_drive_root" action="action_drive_migration" sequence="20"/>
+    <menuitem id="menu_drive_migration" name="نقل الملفات واستعادتها" parent="menu_drive_root" action="action_drive_migration" sequence="20"/>
 </odoo>
 

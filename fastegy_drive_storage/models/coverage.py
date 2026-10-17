@@ -8,7 +8,7 @@ class DriveCoverage(models.Model):
     _description = "Installed model file storage coverage audit"
     _order = "id desc"
 
-    name = fields.Char(default="File coverage audit", required=True)
+    name = fields.Char(default="فحص تغطية الملفات", required=True)
     model_ids = fields.Many2many("ir.model", string="Models; empty audits all installed models")
     scanned_at = fields.Datetime(readonly=True)
     line_ids = fields.One2many("fastegy.drive.coverage.line", "audit_id", readonly=True)
@@ -46,7 +46,7 @@ class DriveCoverage(models.Model):
             self.env["fastegy.drive.coverage.line"].create(rows)
             audit.write({"scanned_at": fields.Datetime.now(), "attachment_fields": attached,
                 "direct_fields": direct, "computed_fields": computed,
-                "explanation": _("This inventory inspects actual installed binary/image field definitions. Direct database columns need a specific adapter or model change. Computed fields, embedded HTML data and custom filesystem/controller writes require workflow/source review. Routing rules can alter the destination by record; a model/field default is not proof that every record is covered. No data or field definition was converted.")})
+                "explanation": _("يفحص التقرير تعريفات حقول الصور والملفات المثبتة فعليًا. الأعمدة المباشرة بقاعدة البيانات تحتاج موصلًا خاصًا. الحقول المحسوبة والصور المضمّنة داخل النصوص والكتابة المخصصة إلى القرص تحتاج مراجعة مصدرها. قد تغيّر قواعد التوجيه وجهة سجل بعينه؛ وجود وجهة افتراضية لا يثبت تغطية كل السجلات. هذا الفحص لا يغيّر البيانات أو تعريفات الحقول.")})
         return True
 
     def action_export(self):
@@ -64,7 +64,7 @@ class DriveCoverageLine(models.Model):
     model_name = fields.Char(required=True)
     field_name = fields.Char(required=True)
     label = fields.Char()
-    status = fields.Selection([("drive", "Drive default; verify record rules"),
-        ("attachment_local", "Attachment; Drive not the default"), ("column", "Direct DB column; adapter needed"),
-        ("computed", "Computed/nonstored; inspect source")], required=True)
+    status = fields.Selection([("drive", "درايف افتراضي؛ راجع قواعد السجلات"),
+        ("attachment_local", "مرفق؛ درايف ليس الوجهة الافتراضية"), ("column", "عمود مباشر بقاعدة البيانات؛ يحتاج موصلًا"),
+        ("computed", "محسوب أو غير محفوظ؛ راجع المصدر")], required=True)
     storage_code = fields.Char()

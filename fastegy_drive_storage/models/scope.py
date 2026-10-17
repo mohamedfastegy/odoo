@@ -250,14 +250,14 @@ class DriveApplicationScope(models.Model):
     def action_fd_scope_report(self):
         self._fd_admin()
         self.ensure_one()
-        return {"type": "ir.actions.act_window", "name": _("Application coverage and exceptions"),
+        return {"type": "ir.actions.act_window", "name": _("تغطية التطبيقات والاستثناءات"),
             "res_model": "fastegy.drive.scope.line", "view_mode": "list,form",
             "domain": [("storage_id", "=", self.id), ("current", "=", True)]}
 
     def action_fd_scope_backfill_report(self):
         self._fd_admin()
         self.ensure_one()
-        return {"type": "ir.actions.act_window", "name": _("Application backfill snapshots"),
+        return {"type": "ir.actions.act_window", "name": _("معاينات نقل ملفات التطبيقات القديمة"),
             "res_model": "fastegy.drive.migration", "view_mode": "list,form",
             "domain": [("fd_scope_storage_id", "=", self.id)]}
 
@@ -420,7 +420,7 @@ class DriveScopeMigration(models.Model):
         if not self.fd_scope_storage_id:
             return super().action_enqueue_batch()
         self._fd_scope_enqueue_batch()
-        return {"type": "ir.actions.act_window", "name": _("Application transfer tasks"),
+        return {"type": "ir.actions.act_window", "name": _("مهام نقل ملفات التطبيقات"),
             "res_model": "fastegy.drive.job", "view_mode": "list,form", "domain": [("migration_id", "=", self.id)]}
 
     def action_run_batch(self):

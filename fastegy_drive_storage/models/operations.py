@@ -17,7 +17,7 @@ class DriveEvent(models.Model):
     storage_id = fields.Many2one("fs.storage", required=True, ondelete="cascade", index=True)
     attachment_id = fields.Many2one("ir.attachment", ondelete="set null")
     operation = fields.Char(required=True, index=True)
-    outcome = fields.Selection([("ok", "Success"), ("error", "Failed"), ("warning", "Warning")], required=True)
+    outcome = fields.Selection([("ok", "ناجح"), ("error", "فشل"), ("warning", "تنبيه")], required=True)
     category = fields.Char(index=True)
     byte_count = fields.Float()
     actor_id = fields.Many2one("res.users", ondelete="set null")
@@ -48,8 +48,8 @@ class DriveBlob(models.Model):
     size = fields.Float()
     checksum = fields.Char()
     md5 = fields.Char()
-    state = fields.Selection([("active", "Referenced"), ("orphan", "Unreferenced"),
-        ("missing", "Missing"), ("trashed", "In Drive trash")], default="active", required=True, index=True)
+    state = fields.Selection([("active", "مرتبط بسجل"), ("orphan", "غير مرتبط"),
+        ("missing", "غير موجود"), ("trashed", "في مهملات درايف")], default="active", required=True, index=True)
     checked_at = fields.Datetime()
     orphan_since = fields.Datetime()
 
@@ -154,10 +154,10 @@ class DriveJob(models.Model):
     storage_id = fields.Many2one("fs.storage", required=True, ondelete="restrict", index=True)
     attachment_id = fields.Many2one("ir.attachment", ondelete="set null", index=True)
     migration_id = fields.Many2one("fastegy.drive.migration", ondelete="set null")
-    kind = fields.Selection([("to_drive", "Move to Drive"), ("to_local", "Restore local"),
-                             ("metadata", "Repair metadata")], required=True, default="to_drive")
-    state = fields.Selection([("pending", "Pending"), ("retry", "Retry scheduled"),
-        ("failed", "Needs attention"), ("done", "Done"), ("cancelled", "Cancelled")], default="pending", required=True, index=True)
+    kind = fields.Selection([("to_drive", "نقل إلى درايف"), ("to_local", "استعادة إلى أودو"),
+                             ("metadata", "إصلاح بيانات الملف")], required=True, default="to_drive")
+    state = fields.Selection([("pending", "قيد الانتظار"), ("retry", "إعادة المحاولة مجدولة"),
+        ("failed", "يحتاج متابعة"), ("done", "مكتمل"), ("cancelled", "ملغى")], default="pending", required=True, index=True)
     expected_checksum = fields.Char()
     attempts = fields.Integer(readonly=True)
     max_attempts = fields.Integer(default=5, required=True)

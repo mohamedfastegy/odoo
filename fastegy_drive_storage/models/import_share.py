@@ -16,8 +16,8 @@ class DriveImport(models.TransientModel):
     record_id = fields.Integer(required=True)
     name = fields.Char(help="Optional filename override")
     attachment_id = fields.Many2one("ir.attachment", readonly=True)
-    mode = fields.Selection([("reference", "Reference existing bytes via private shortcut"),
-                             ("copy", "Independent managed copy")], default="reference", required=True)
+    mode = fields.Selection([("reference", "مرجع خاص للملف الأصلي"),
+                             ("copy", "نسخة مستقلة يديرها النظام")], default="reference", required=True)
 
     def action_picker(self):
         self.env["fs.storage"]._fd_admin()

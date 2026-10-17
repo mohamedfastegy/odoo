@@ -13,7 +13,7 @@ class DriveMigration(models.Model):
     _description = "Scoped Drive migration trial"
     _order = "id desc"
 
-    name = fields.Char(required=True, default="Drive trial")
+    name = fields.Char(required=True, default="تجربة نقل الملفات")
     storage_id = fields.Many2one("fs.storage", required=True, ondelete="restrict",
                                  domain=[("protocol", "=", PROTOCOL)])
     # أودو يمنع restrict على البيانات الوصفية؛ حذف النطاق يلغي مهمته بدل توسيعها.
@@ -24,12 +24,12 @@ class DriveMigration(models.Model):
         string="Include binary/image field attachments", default=False,
         help="When no specific field is selected, leave this off to move only ordinary record attachments, excluding image fields and thumbnails.")
     record_id = fields.Integer(string="Only this business record ID", help="Set a record ID for the first test; zero selects the model scope.")
-    direction = fields.Selection([("to_drive", "Odoo → Drive"), ("to_local", "Drive → local Odoo")],
+    direction = fields.Selection([("to_drive", "من أودو إلى درايف"), ("to_local", "من درايف إلى تخزين أودو المحلي")],
                                  required=True, default="to_drive")
     batch_size = fields.Integer(default=1, required=True)
-    state = fields.Selection([("draft", "Draft"), ("ready", "Preview ready"),
-                              ("running", "Running"), ("paused", "Paused"),
-                              ("error", "Needs attention"), ("queued", "Transfers queued"), ("done", "Done")],
+    state = fields.Selection([("draft", "مسودة"), ("ready", "المعاينة جاهزة"),
+                              ("running", "جارٍ التنفيذ"), ("paused", "متوقف مؤقتًا"),
+                              ("error", "يحتاج متابعة"), ("queued", "مهام النقل في الطابور"), ("done", "مكتمل")],
                              default="draft", required=True, readonly=True)
     preview_at = fields.Datetime(readonly=True)
     max_attachment_id = fields.Integer(readonly=True)
@@ -54,7 +54,7 @@ class DriveMigration(models.Model):
             self.env["fastegy.drive.job"]._enqueue(self.storage_id, attachment, self.direction, self)
             self.write({"last_attachment_id": attachment.id, "queued_count": self.queued_count + 1})
         self.state = "running" if self.env["ir.attachment"].sudo().search_count(self._domain(), limit=1) else "queued"
-        return {"type": "ir.actions.act_window", "name": _("Independent transfer tasks"), "res_model": "fastegy.drive.job",
+        return {"type": "ir.actions.act_window", "name": _("مهام النقل المستقلة"), "res_model": "fastegy.drive.job",
                 "view_mode": "list,form", "domain": [("migration_id", "=", self.id)]}
 
     def _fd_update_queue_progress(self):

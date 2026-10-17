@@ -24,7 +24,7 @@ class DriveRule(models.Model):
     minimum_bytes = fields.Float(default=0)
     maximum_bytes = fields.Float(default=0, help="Zero means no additional rule limit; the storage file limit still applies.")
     record_domain = fields.Text(default="[]", required=True, help="A literal Odoo domain; no executable Python.")
-    mode = fields.Selection([("drive", "This Drive storage"), ("local", "Local Odoo")], default="drive", required=True)
+    mode = fields.Selection([("drive", "اتصال درايف المحدد"), ("local", "تخزين أودو المحلي")], default="drive", required=True)
     test_record_id = fields.Integer(string="Preview record ID")
     test_mimetype = fields.Char(default="image/jpeg")
     test_size = fields.Float(default=1024)
@@ -35,7 +35,7 @@ class DriveRule(models.Model):
         for rule in self:
             chosen = rule._choose({"res_model": rule.model_id.model, "res_id": rule.test_record_id,
                 "res_field": rule.field_id.name if rule.field_id else False}, rule.test_size, rule.test_mimetype, rules=rule)
-            rule.test_result = chosen or "No match for this sample"
+            rule.test_result = chosen or "لا توجد قاعدة مطابقة لهذه العينة"
         return True
 
     @api.constrains("record_domain", "model_id", "field_id", "minimum_bytes", "maximum_bytes")
@@ -79,14 +79,14 @@ class DriveManagement(models.Model):
     _inherit = ["fs.storage", "mail.thread", "mail.activity.mixin"]
 
     fd_shared_drive_id = fields.Char(string="Shared drive ID", copy=False)
-    fd_folder_layout = fields.Selection([("flat", "Dedicated root"), ("record", "Company / model / record / field")],
+    fd_folder_layout = fields.Selection([("flat", "المجلد الرئيسي فقط"), ("record", "الشركة ثم الموديل ثم السجل ثم الحقل")],
                                        default="flat", required=True)
     fd_retention_days = fields.Integer(default=30, required=True)
     fd_jobs_enabled = fields.Boolean(default=False)
     fd_monitor_enabled = fields.Boolean(default=False)
     fd_notify_user_id = fields.Many2one("res.users", domain=[("share", "=", False)])
-    fd_health = fields.Selection([("unchecked", "Not checked"), ("ok", "Healthy"),
-        ("warning", "Needs attention"), ("error", "Connection failed")], default="unchecked", readonly=True)
+    fd_health = fields.Selection([("unchecked", "لم يتم الفحص"), ("ok", "سليم"),
+        ("warning", "يحتاج متابعة"), ("error", "تعذر الاتصال")], default="unchecked", readonly=True)
     fd_checked_at = fields.Datetime(readonly=True)
     fd_error_category = fields.Char(readonly=True)
     fd_quota_used = fields.Float(readonly=True, string="Account bytes used")
@@ -94,8 +94,8 @@ class DriveManagement(models.Model):
     fd_quota_known = fields.Boolean(readonly=True)
     fd_shared_verified = fields.Boolean(readonly=True)
     fd_encryption_state = fields.Char(compute="_compute_fd_encryption_state", groups="base.group_system")
-    fd_oauth_lifecycle = fields.Selection([("testing", "External testing"), ("production", "External production"),
-        ("internal", "Workspace internal")], default="testing")
+    fd_oauth_lifecycle = fields.Selection([("testing", "تطبيق خارجي في وضع الاختبار"), ("production", "تطبيق خارجي في وضع التشغيل"),
+        ("internal", "تطبيق داخلي للشركة")], default="testing")
     fd_picker_api_key = fields.Char(groups="base.group_system", copy=False)
     fd_picker_app_id = fields.Char(groups="base.group_system", copy=False)
     fd_blob_count = fields.Integer(compute="_compute_fd_metrics")
@@ -112,8 +112,8 @@ class DriveManagement(models.Model):
     def _compute_fd_encryption_state(self):
         for storage in self:
             values = [v for v in (storage.fd_refresh_token, storage.fd_client_secret) if v]
-            storage.fd_encryption_state = ("Encrypted; external key required" if values and all(v.startswith(PREFIX) for v in values)
-                                           else "Legacy values; encrypt before production")
+            storage.fd_encryption_state = ("مشفّر؛ يحتاج مفتاح التشفير الخارجي" if values and all(v.startswith(PREFIX) for v in values)
+                                           else "بيانات قديمة غير مشفّرة؛ يلزم تشفيرها قبل التشغيل الفعلي")
 
     def _compute_fd_metrics(self):
         # Aggregate in PostgreSQL instead of loading every file into the dashboard worker.
@@ -278,7 +278,7 @@ class DriveManagement(models.Model):
 
     def action_fd_files(self):
         self.ensure_one()
-        return {"type": "ir.actions.act_window", "name": _("Managed Drive files"), "res_model": "fastegy.drive.blob",
+        return {"type": "ir.actions.act_window", "name": _("الملفات المدارة على درايف"), "res_model": "fastegy.drive.blob",
                 "view_mode": "list,form", "domain": [("storage_id", "=", self.id)], "context": {"default_storage_id": self.id}}
 
     def action_fd_manifest(self):

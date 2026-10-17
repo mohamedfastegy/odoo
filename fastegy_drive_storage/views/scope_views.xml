@@ -46,8 +46,8 @@
         <field name="model">fastegy.drive.scope.line</field>
         <field name="arch" type="xml">
             <list create="false" edit="false" delete="false" decoration-danger="status in ('conflict','missing')" decoration-warning="status in ('column','review')" decoration-muted="status in ('shared','computed','excluded','retired')">
-                <field name="status"/><field name="kind"/><field name="label"/><field name="model_name"/>
-                <field name="field_name"/><field name="source_modules"/><field name="reason"/>
+                <field name="status" string="الحالة"/><field name="kind" string="نوع المهمة"/><field name="label" string="الوصف"/><field name="model_name" string="اسم الموديل التقني" optional="hide"/>
+                <field name="field_name" string="اسم الحقل التقني" optional="hide"/><field name="source_modules" string="الإضافات المصدر" optional="hide"/><field name="reason" string="السبب"/>
             </list>
         </field>
     </record>
@@ -56,9 +56,9 @@
         <field name="model">fastegy.drive.scope.line</field>
         <field name="arch" type="xml">
             <form create="false" edit="false" delete="false"><sheet><group>
-                <field name="storage_id"/><field name="status"/><field name="kind"/><field name="label"/>
-                <field name="model_name"/><field name="field_name"/><field name="source_modules"/>
-                <field name="current"/><field name="reason"/>
+                <field name="storage_id" string="اتصال التخزين"/><field name="status" string="الحالة"/><field name="kind" string="نوع المهمة"/><field name="label" string="الوصف"/>
+                <field name="model_name" string="اسم الموديل التقني"/><field name="field_name" string="اسم الحقل التقني"/><field name="source_modules" string="الإضافات المصدر"/>
+                <field name="current" string="ضمن النطاق الحالي"/><field name="reason" string="السبب"/>
             </group></sheet></form>
         </field>
     </record>
