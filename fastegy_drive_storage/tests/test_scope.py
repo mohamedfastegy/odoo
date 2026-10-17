@@ -252,3 +252,43 @@ class TestApplicationScope(TransactionCase):
         rows, fingerprint = self.storage._fd_scope_plan(["fastegy_drive_storage"])
         self.assertTrue(fingerprint)
         self.assertTrue(any(r["model_name"] == "fastegy.drive.scope.line" and r["status"] == "excluded" for r in rows))
+
+    def test_transfer_status_distinguishes_preview_from_completed_upload(self):
+        self._attachment(local=True)
+        migrations = self._scoped_backfill()
+        self.storage._compute_fd_transfer_status()
+        self.assertIn('لم تُضف ملفاتها إلى الطابور', self.storage.fd_transfer_status)
+        self.assertFalse(self.env['fastegy.drive.job'].search_count([('migration_id', 'in', migrations.ids)]))
+        migrations._fd_scope_enqueue_batch()
+        self.storage._compute_fd_transfer_status()
+        self.assertIn('انتظار 1', self.storage.fd_transfer_status)
+        self.assertIn('مكتمل 0', self.storage.fd_transfer_status)
+
+    def test_transfer_status_ignores_previous_scope_generation(self):
+        self._attachment(local=True)
+        migrations = self._scoped_backfill()
+        migrations.fd_scope_plan_hash = 'previous-generation'
+        self.storage._compute_fd_transfer_status()
+        self.assertIn('لا توجد معاينات في الخطة الحالية', self.storage.fd_transfer_status)
+
+    def test_transfer_status_off_does_not_claim_completion(self):
+        self.storage._compute_fd_transfer_status()
+        self.assertIn('غير مفعّل', self.storage.fd_transfer_status)
+
+    def test_native_scheduler_dispatches_only_installed_operation(self):
+        cron = self.env.ref('fastegy_drive_storage.cron_drive_scope')
+        action = cron.ir_actions_server_id
+        action.write({'state': 'fastegy_drive_maintenance'})
+        with patch.object(type(self.storage), '_cron_fd_scope') as run:
+            action.run()
+            run.assert_called_once()
+        duplicate = action.copy({'state': 'fastegy_drive_maintenance'})
+        with self.assertRaises(ValidationError):
+            duplicate.run()
+
+    def test_native_scheduler_preserves_storage_safe_eval_guard(self):
+        from odoo.tools.safe_eval import safe_eval
+        with self.assertRaises(Exception) as error:
+            safe_eval("storage.write({'name': 'must not change'})", {'storage': self.storage}, mode='exec')
+        self.assertIn('not allowed', str(error.exception))
+        self.assertEqual(self.storage.name, 'Scope isolated')

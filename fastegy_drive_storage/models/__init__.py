@@ -6,4 +6,6 @@ from . import management
 from . import coverage
 from . import import_share
 from . import scope
+from . import readiness
+from . import scheduler
 

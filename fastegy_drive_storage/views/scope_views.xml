@@ -31,6 +31,9 @@
                         <button name="action_fd_scope_pause" type="object" string="إيقاف النطاق التلقائي" invisible="not fd_scope_active"/>
                     </div>
                     <field name="fd_scope_summary" nolabel="1"/>
+                    <group string="متابعة نقل الملفات القديمة">
+                        <field name="fd_transfer_status" nolabel="1"/>
+                    </group>
                     <field name="fd_scope_backfill_applied" invisible="1"/>
                     <p>المتابعة كل ١٥ دقيقة بعد التفعيل. الملاحظات والرسائل تستخدم وجهة السجل بعد ربط المرفق به. الأعمدة المباشرة والكتابة المخصصة إلى القرص تحتاج موصلًا، ولا تُعتبر مغطاة بمجرد اختيار التطبيق.</p>
                     <p>إيقاف النطاق التلقائي يبقي الملفات السابقة قابلة للقراءة. الإعدادات اليدوية وقواعد التوجيه مستقلة ولها الأولوية. نقل القديم اختياري ويقتصر على المرفقات الخاصة المدعومة.</p>

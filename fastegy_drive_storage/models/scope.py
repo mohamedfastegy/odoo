@@ -317,7 +317,7 @@ class DriveApplicationScope(models.Model):
                 continue
             field = self.env["ir.model.fields"].sudo().search([("model_id", "=", model.id),
                 ("name", "=", line.field_name)], limit=1) if line.field_name else False
-            values = {"name": "Application backfill: " + line.scope_key, "storage_id": self.id, "model_id": model.id,
+            values = {"name": "نقل ملفات قديمة: " + line.scope_key, "storage_id": self.id, "model_id": model.id,
                 "field_id": field.id if field else False, "include_field_attachments": True,
                 "fd_scope_storage_id": self.id, "fd_scope_key": line.scope_key,
                 "fd_scope_plan_hash": self._fd_scope_generation()}

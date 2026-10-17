@@ -23,7 +23,8 @@
                         </group>
                         <group>
                             <field name="fd_blob_count" string="عدد الملفات المدارة" />
-                            <field name="fd_blob_bytes" string="حجم الملفات المدارة بالبايت" />
+                            <field name="fd_managed_mb"/>
+                            <field name="fd_blob_bytes" string="حجم الملفات المدارة بالبايت" invisible="1" />
                             <field name="fd_failed_jobs" string="مهام تحتاج إعادة محاولة" />
                             <field name="fd_orphan_count" string="ملفات غير مرتبطة" />
                             <field name="fd_reconcile_in_progress" string="مراجعة الملفات جارية" />
@@ -231,7 +232,7 @@
         </form>
     </field>
 </record>
-    <record id="action_fd_rules" model="ir.actions.act_window"><field name="name">قواعد التوجيه المتقدمة</field><field name="res_model">fastegy.drive.rule</field><field name="view_mode">list,form</field></record>
+    <record id="action_fd_rules" model="ir.actions.act_window"><field name="name">قواعد التوجيه المتقدمة</field><field name="res_model">fastegy.drive.rule</field><field name="view_mode">list,form</field><field name="help" type="html"><p>لا توجد استثناءات توجيه يدوية. التوجيه التلقائي يُراجع من اختيار التطبيقات ثم التغطية والاستثناءات. إنشاء قاعدة هنا اختياري وليس شرطًا لتشغيل التخزين.</p></field></record>
     <record id="view_fd_coverage_list" model="ir.ui.view"><field name="name">fastegy.drive.coverage.list</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
         <list><field name="name" string="الاسم"/><field name="scanned_at" string="آخر فحص"/><field name="attachment_fields" string="حقول المرفقات"/><field name="direct_fields" string="حقول محفوظة بقاعدة البيانات"/><field name="computed_fields" string="حقول محسوبة"/></list></field></record>
     <record id="view_fd_coverage_form" model="ir.ui.view"><field name="name">fastegy.drive.coverage.form</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
@@ -252,7 +253,7 @@
     <record id="view_fd_share_form" model="ir.ui.view"><field name="name">fastegy.drive.share.form</field><field name="model">fastegy.drive.share</field><field name="arch" type="xml">
         <form><header><button name="action_revoke" type="object" string="إلغاء تصريح الوصول"/></header><sheet><p>يمنح جهة الاتصال المحددة، بعد تسجيل الدخول، صلاحية قراءة هذا الملف حتى انتهاء المدة. لا يتيح السجل الأصلي ولا يرسل رسالة.</p>
             <group><field name="attachment_id" string="المرفق"/><field name="partner_id" string="جهة الاتصال المصرّح لها"/><field name="expires_at" string="انتهاء الصلاحية"/><field name="active" string="مفعّل"/><field name="url" string="رابط الوصول" widget="url"/></group></sheet></form></field></record>
-    <record id="action_fd_shares" model="ir.actions.act_window"><field name="name">تصاريح الوصول الخاصة</field><field name="res_model">fastegy.drive.share</field><field name="view_mode">list,form</field></record>
+    <record id="action_fd_shares" model="ir.actions.act_window"><field name="name">تصاريح الوصول الخاصة</field><field name="res_model">fastegy.drive.share</field><field name="view_mode">list,form</field><field name="help" type="html"><p>لا توجد تصاريح وصول خاصة. مستخدمو أودو يستمرون بصلاحيات السجلات المعتادة. أنشئ تصريحًا فقط عند الحاجة لمنح جهة اتصال وصولًا مؤقتًا إلى ملف محدد.</p></field></record>
     <record id="view_fd_migration_queue" model="ir.ui.view"><field name="name">fastegy.drive.migration.queue</field><field name="model">fastegy.drive.migration</field>
         <field name="inherit_id" ref="view_drive_migration_form"/><field name="arch" type="xml">
             <xpath expr="//header" position="inside"><button name="action_enqueue_batch" type="object" string="إضافة الدفعة التالية للطابور بحد أقصى ٥٠٠ ملف" invisible="state not in ('ready','running')"/></xpath>
