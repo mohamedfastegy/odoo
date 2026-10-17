@@ -133,7 +133,7 @@ class TestApplicationScope(TransactionCase):
         first_ids = self.storage.fd_scope_line_ids.ids
         with patch.object(type(self.storage), "_fd_scope_descriptors", return_value=self._descriptors()):
             self.storage.action_fd_scope_refresh()
-        self.assertEqual(self.storage.fd_scope_line_ids.ids, first_ids)
+        self.assertEqual(set(self.storage.fd_scope_line_ids.ids), set(first_ids))
         descriptors = self._descriptors()
         descriptors[0]["fields"] = [{"name": "image_1024", "store": True, "attachment": True,
                                      "origin": "mail", "modules": ["mail"]}]
@@ -197,6 +197,44 @@ class TestApplicationScope(TransactionCase):
         initial = self._scoped_backfill()
         self._activate()
         self.assertEqual(self.env["fastegy.drive.migration"].search([("fd_scope_storage_id", "=", self.storage.id)]), initial)
+
+    def test_local_routing_rule_excludes_old_file_from_automatic_backfill(self):
+        attachment = self._attachment(local=True)
+        model = self.env["ir.model"].search([("model", "=", "res.partner")])
+        self.env["fastegy.drive.rule"].create({"name": "Keep this fixture local", "active": True,
+            "storage_id": self.storage.id, "model_id": model.id, "mode": "local",
+            "record_domain": repr([("id", "=", self.partner.id)])})
+        migrations = self._scoped_backfill()
+        migrations._fd_scope_enqueue_batch()
+        self.assertFalse(self.env["fastegy.drive.job"].search_count([("migration_id", "in", migrations.ids)]))
+        self.assertEqual(migrations.fd_scope_skipped, 1)
+        self.assertEqual(migrations.state, "done")
+        self.assertNotIn("://", attachment.store_fname)
+
+    def test_a_new_scope_generation_cancels_previously_queued_work(self):
+        attachment = self._attachment(local=True)
+        migration = self._scoped_backfill()
+        migration._fd_scope_enqueue_batch()
+        job = self.env["fastegy.drive.job"].search([("migration_id", "=", migration.id)])
+        old_generation = self.storage._fd_scope_generation()
+        with patch.object(type(self.storage), "_fd_scope_descriptors", return_value=self._descriptors(shared=True)):
+            self.storage.action_fd_scope_refresh()
+        self.assertNotEqual(old_generation, self.storage._fd_scope_generation())
+        job.action_run()
+        self.assertEqual(job.state, "cancelled")
+        self.assertNotIn("://", attachment.store_fname)
+
+    def test_transfer_rejects_large_source_before_reading_its_binary(self):
+        attachment = self.env["ir.attachment"].with_context(storage_location="file").create({
+            "name": "large synthetic fixture.bin", "raw": b"x" * (2 * 1048576),
+            "res_model": "res.partner", "res_id": self.partner.id})
+        self.storage.fd_max_file_mb = 1
+        job = self.env["fastegy.drive.job"]._enqueue(self.storage, attachment)
+        with patch.object(type(attachment), "_file_read", side_effect=AssertionError("Large content must not be read")) as read:
+            job.action_run()
+        read.assert_not_called()
+        self.assertEqual(job.state, "failed")
+        self.assertNotIn("://", attachment.store_fname)
 
     def test_live_registry_provenance_scanner_does_not_use_name_prefixes(self):
         descriptors = self.storage._fd_scope_descriptors()

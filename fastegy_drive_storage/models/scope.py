@@ -183,7 +183,8 @@ class DriveApplicationScope(models.Model):
             row = dict(row)
             row.update(storage_id=self.id, current=True,
                 route_key=row["scope_key"] if row["status"] == READY and self.fd_scope_active else False,
-                reason=REASONS.get(row["reason"], row["reason"]))
+                reason=("تخصيص مخزن قائم له الأولوية: " + row["reason"].partition(":")[2])
+                    if row["reason"].startswith("existing_storage:") else REASONS.get(row["reason"], row["reason"]))
             if row["scope_key"] in existing:
                 existing[row["scope_key"]].write(row)
             else:
@@ -191,8 +192,8 @@ class DriveApplicationScope(models.Model):
         ready_models = sum(row["status"] == READY and row["kind"] == "model" for row in rows)
         ready_fields = sum(row["status"] == READY and row["kind"] == "field" for row in rows)
         exceptions = sum(row["status"] in ("column", "review", "conflict", "missing") for row in rows)
-        summary = _("Ready models: %(models)s; attachment fields: %(fields)s; exceptions: %(exceptions)s. "
-                    "Counts are definitions, not files. Shared models, nonstored fields and excluded infrastructure are listed separately.") % {
+        summary = _("الموديلات الجاهزة: %(models)s؛ حقول المرفقات: %(fields)s؛ الاستثناءات: %(exceptions)s. "
+                    "الأعداد لتعريفات الموديلات والحقول، ولا تمثل عدد الملفات. تفاصيل الموديلات المشتركة والحقول المحسوبة والمستبعدة متاحة في التقرير.") % {
                         "models": ready_models, "fields": ready_fields, "exceptions": exceptions}
         self._fd_scope_write({"fd_scope_fingerprint": fingerprint, "fd_scope_summary": summary})
         self.env.registry.clear_cache()
@@ -224,7 +225,7 @@ class DriveApplicationScope(models.Model):
         if self.fd_scope_auto_update or self.fd_scope_include_existing:
             self.env.ref("fastegy_drive_storage.cron_drive_scope").sudo().write({"active": True})
         return {"type": "ir.actions.client", "tag": "display_notification", "params": {
-            "title": _("Application storage scope activated"), "message": self.fd_scope_summary,
+            "title": _("تم تفعيل نطاق التطبيقات"), "message": self.fd_scope_summary,
             "type": "warning" if self.fd_scope_line_ids.filtered(lambda l: l.current and l.status in (
                 "column", "review", "conflict", "missing")) else "success", "sticky": True}}
 
