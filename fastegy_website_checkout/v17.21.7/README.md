@@ -10,7 +10,7 @@
 | الملف | md5 المشفّر | md5 بعد فك التشفير |
 |---|---|---|
 | fastegy_website_checkout_v17.21.7.tar.enc | 6d6409c70f08982f542b1300139307b1 | c98e95f40a432cb987ae6a33d93a9025 |
-| test_v17.21.7.sh.enc | 08c4414711c7282cc38b74fad13db87b | 2e1cd9c9a95e7ef6e60d0938697c69d5 |
+| test_v17.21.7.sh.enc | a89754d83cd6e2a021a605e27c876d13 | 0492afc3647242b614204dd0bca21c97 |
 
 جوه الـ tar:
 
