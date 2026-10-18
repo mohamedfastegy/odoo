@@ -1,0 +1,68 @@
+<odoo>
+    <record id="view_drive_storage_scope" model="ir.ui.view">
+        <field name="name">fastegy.drive.storage.application.scope</field>
+        <field name="model">fs.storage</field>
+        <field name="inherit_id" ref="view_drive_storage_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='fd_manual_routes']" position="before">
+                <page string="اختيار التطبيقات" name="fd_application_scope">
+                    <p>اختَر الإضافات المثبتة مرة واحدة. نكتشف الموديلات التي أنشأتها وحقول الملفات التي أضافتها، ثم نوجّه المسارات المدعومة.</p>
+                    <group>
+                        <group>
+                            <field name="fd_scope_module_ids" widget="many2many_tags" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="fd_scope_auto_update"/>
+                            <field name="fd_scope_include_existing"/>
+                        </group>
+                        <group>
+                            <field name="fd_scope_active"/>
+                            <field name="fd_scope_checked_at"/>
+                            <field name="fd_scope_dirty" invisible="1"/>
+                            <field name="fd_scope_error" invisible="not fd_scope_error"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-info" role="alert" invisible="not fd_scope_dirty">
+                        التغييرات في اختيار الإضافات أو تفعيل نقل القديم تحتاج «اكتشاف وتفعيل». تظل آخر خطة مطبقة سارية حتى التطبيق أو الإيقاف.
+                    </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <button name="action_fd_scope_activate" type="object" string="اكتشاف وتفعيل" class="btn-primary"/>
+                        <button name="action_fd_scope_refresh" type="object" string="فحص التحديثات الآن" invisible="not fd_scope_active"/>
+                        <button name="action_fd_scope_report" type="object" string="التغطية والاستثناءات"/>
+                        <button name="action_fd_scope_backfill_report" type="object" string="مهام نقل القديم" invisible="not fd_scope_backfill_applied"/>
+                        <button name="action_fd_scope_pause" type="object" string="إيقاف النطاق التلقائي" invisible="not fd_scope_active"/>
+                    </div>
+                    <field name="fd_scope_summary" nolabel="1"/>
+                    <group string="متابعة نقل الملفات القديمة">
+                        <field name="fd_transfer_status" nolabel="1"/>
+                    </group>
+                    <field name="fd_scope_backfill_applied" invisible="1"/>
+                    <p>المتابعة كل ١٥ دقيقة بعد التفعيل. الملاحظات والرسائل تستخدم وجهة السجل بعد ربط المرفق به. الأعمدة المباشرة والكتابة المخصصة إلى القرص تحتاج موصلًا، ولا تُعتبر مغطاة بمجرد اختيار التطبيق.</p>
+                    <p>إيقاف النطاق التلقائي يبقي الملفات السابقة قابلة للقراءة. الإعدادات اليدوية وقواعد التوجيه مستقلة ولها الأولوية. نقل القديم اختياري ويقتصر على المرفقات الخاصة المدعومة.</p>
+                </page>
+            </xpath>
+            <xpath expr="//page[@name='fd_manual_routes']" position="attributes">
+                <attribute name="string">التوجيه اليدوي — متقدم</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_fd_scope_line_list" model="ir.ui.view">
+        <field name="name">fastegy.drive.scope.line.list</field>
+        <field name="model">fastegy.drive.scope.line</field>
+        <field name="arch" type="xml">
+            <list create="false" edit="false" delete="false" decoration-danger="status in ('conflict','missing')" decoration-warning="status in ('column','review')" decoration-muted="status in ('shared','computed','excluded','retired')">
+                <field name="status" string="الحالة"/><field name="kind" string="نوع المهمة"/><field name="label" string="الوصف"/><field name="model_name" string="اسم الموديل التقني" optional="hide"/>
+                <field name="field_name" string="اسم الحقل التقني" optional="hide"/><field name="source_modules" string="الإضافات المصدر" optional="hide"/><field name="reason" string="السبب"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_fd_scope_line_form" model="ir.ui.view">
+        <field name="name">fastegy.drive.scope.line.form</field>
+        <field name="model">fastegy.drive.scope.line</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false"><sheet><group>
+                <field name="storage_id" string="اتصال التخزين"/><field name="status" string="الحالة"/><field name="kind" string="نوع المهمة"/><field name="label" string="الوصف"/>
+                <field name="model_name" string="اسم الموديل التقني"/><field name="field_name" string="اسم الحقل التقني"/><field name="source_modules" string="الإضافات المصدر"/>
+                <field name="current" string="ضمن النطاق الحالي"/><field name="reason" string="السبب"/>
+            </group></sheet></form>
+        </field>
+    </record>
+</odoo>

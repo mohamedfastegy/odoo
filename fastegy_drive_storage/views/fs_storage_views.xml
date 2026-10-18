@@ -1,0 +1,126 @@
+<odoo>
+    <record id="view_drive_storage_list" model="ir.ui.view">
+        <field name="name">fastegy.drive.storage.list</field>
+        <field name="model">fs.storage</field>
+        <field name="arch" type="xml">
+            <list string="تخزين فاست إيجي على درايف">
+                <field name="name" string="اسم الاتصال" />
+                <field name="code" string="رمز التخزين" />
+                <field name="fd_connection_checked" string="تم التحقق من المجلد" />
+                <field name="fd_allow_writes" string="السماح برفع ملفات جديدة" />
+                <field name="fd_readonly" string="القراءة فقط" />
+                <field name="fd_bound_database" string="قاعدة البيانات المرتبطة" />
+            </list>
+        </field>
+    </record>
+    <record id="view_drive_storage_form" model="ir.ui.view">
+        <field name="name">fastegy.drive.storage.form</field>
+        <field name="model">fs.storage</field>
+        <field name="arch" type="xml">
+            <form string="تخزين درايف — نسخة تجريبية">
+                <header>
+                    <button name="action_fd_authorize" type="object" string="ربط حساب جوجل" class="btn-primary" />
+                    <button name="action_fd_test_connection" type="object" string="اختبار المجلد" />
+                    <button name="action_fd_disconnect" type="object" string="فصل الحساب" confirm="افصل الحساب فقط عندما لا توجد مرفقات تستخدم هذا المخزن." />
+                </header>
+                <sheet>
+                    <field name="fd_clone_readonly" invisible="1" />
+                    <div class="alert alert-info" role="alert">
+                        نسخة تجريبية: لا تنقل الملفات تلقائيًا عند التثبيت. ابدأ بسجل واحد.
+                        المصادقة تُنشئ مجلدًا خاصًا عند ترك معرف المجلد فارغًا.
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="not fd_clone_readonly">
+                        هذه قاعدة مستنسخة: اتصال المصدر للقراءة فقط. أنشئ مخزنًا منفصلًا للتجربة.
+                    </div>
+                    <group>
+                        <group string="اتصال التخزين">
+                            <field name="name" string="اسم الاتصال" />
+                        </group>
+                        <group string="المجلد وحالة الاتصال" groups="base.group_system">
+                            <field name="fd_root_folder_id" string="معرّف مجلد التخزين" />
+                            <field name="fd_connection_checked" string="تم التحقق من المجلد" />
+                        </group>
+                    </group>
+                    <div groups="base.group_system">
+                        <details class="mt-3 mb-3">
+                            <summary class="fw-bold mb-3">إعداد الاتصال — متقدم</summary>
+                            <group>
+                                <group string="بيانات الاتصال التقنية">
+                                    <field name="code" string="رمز التخزين" />
+                                    <field name="protocol" readonly="1" string="موصل التخزين" />
+                                    <field name="fd_namespace" string="معرّف مساحة التخزين" />
+                                    <field name="fd_bound_database" string="قاعدة البيانات المرتبطة" />
+                                    <field name="fd_bound_origin" string="عنوان النظام المرتبط" />
+                                </group>
+                                <group string="إعداد الربط بحساب جوجل">
+                                    <field name="fd_client_id" string="معرّف تطبيق جوجل" />
+                                    <field name="fd_client_secret" password="True" string="سر تطبيق جوجل" />
+                                    <field name="fd_refresh_token" password="True" readonly="1" string="رمز تجديد الاتصال" />
+                                    <field name="fd_redirect_uri" widget="url" string="رابط العودة من جوجل" />
+                                </group>
+                            </group>
+                        </details>
+                    </div>
+                    <group string="الرفع والتشغيل">
+                        <field name="fd_allow_writes" string="السماح برفع ملفات جديدة" />
+                        <field name="fd_readonly" string="القراءة فقط" />
+                        <field name="fd_max_file_mb" string="أقصى حجم للملف بالميبيبايت" />
+                    </group>
+                    <notebook>
+                        <page string="التوجيه اليدوي — متقدم" name="fd_manual_routes" invisible="1">
+                            <details class="mt-3 mb-3">
+                                <summary class="fw-bold mb-3">قواعد يدوية اختيارية — لها الأولوية على الاختيار التلقائي</summary>
+                                <p>اختر الموديلات أو الحقول بعد نجاح اختبار الاتصال. قاعدة الحقل لها الأولوية.</p>
+                                <group>
+                                    <field name="model_ids" string="الموديلات المحددة يدويًا" widget="many2many" options="{'no_create': True}">
+                                        <list>
+                                            <field name="name" string="الاسم" />
+                                            <field name="model" string="الموديل" />
+                                        </list>
+                                    </field>
+                                    <field name="field_ids" string="الحقول المحددة يدويًا" widget="many2many" domain="[('ttype', '=', 'binary')]" options="{'no_create': True}">
+                                        <list>
+                                            <field name="name" string="الاسم" />
+                                            <field name="model" string="الموديل" />
+                                        </list>
+                                    </field>
+                                </group>
+                            </details>
+                        </page>
+                        <page string="تفاصيل تقنية" groups="base.group_no_one">
+                            <group>
+                                <field name="is_cacheable" string="التخزين المؤقت" readonly="1" />
+                                <field name="use_filename_obfuscation" string="إخفاء أسماء الملفات التقنية" readonly="1" />
+                                <field name="autovacuum_gc" string="التنظيف الآلي" readonly="1" />
+                                <field name="use_as_default_for_attachments" string="المخزن الافتراضي للمرفقات" readonly="1" />
+                                <field name="directory_path" string="المسار التقني" readonly="1" />
+                            </group>
+                            <p>تحتفظ النسخة التجريبية بالملفات البعيدة غير المرتبطة لاستعادة البيانات؛ تنظيفها آليًا معطل.</p>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_drive_storage" model="ir.actions.act_window">
+        <field name="name">تخزين جوجل درايف</field>
+        <field name="res_model">fs.storage</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('protocol', '=', 'fastegy_gdrive')]</field>
+        <field name="context">{'default_protocol': 'fastegy_gdrive', 'default_is_cacheable': False, 'default_use_filename_obfuscation': True, 'default_autovacuum_gc': False}</field>
+    </record>
+    <record id="action_drive_storage_list_view" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_drive_storage_list" />
+        <field name="act_window_id" ref="action_drive_storage" />
+    </record>
+    <record id="action_drive_storage_form_view" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_drive_storage_form" />
+        <field name="act_window_id" ref="action_drive_storage" />
+    </record>
+    <menuitem id="menu_drive_root" name="FastEgy Drive" parent="base.menu_administration" sequence="90" groups="base.group_system" />
+    <menuitem id="menu_drive_storages" name="اتصالات التخزين" parent="menu_drive_root" action="action_drive_storage" sequence="10" />
+</odoo>

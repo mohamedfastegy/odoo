@@ -1,0 +1,10 @@
+<odoo>
+    <record id="view_fd_workspace_list" model="ir.ui.view"><field name="name">fastegy.drive.workspace.list</field><field name="model">fastegy.drive.workspace</field>
+        <field name="arch" type="xml"><list><field name="folder_id" string="مجلد المستندات"/><field name="storage_id" string="اتصال التخزين"/><field name="include_subfolders" string="تضمين المجلدات الفرعية"/><field name="active" string="مفعّل"/></list></field></record>
+    <record id="view_fd_workspace_form" model="ir.ui.view"><field name="name">fastegy.drive.workspace.form</field><field name="model">fastegy.drive.workspace</field>
+        <field name="arch" type="xml"><form><header><button name="action_queue_existing" type="object" string="إضافة ملفات المجلد الحالية لطابور النقل" confirm="هل تريد إنشاء مهام نقل لملفات هذا المجلد؟ راجع الطابور قبل تشغيله."/></header>
+            <sheet><p>تتبع الملفات الجديدة أقرب قاعدة مجلد مفعّلة. تُنقل الملفات القديمة بمهام نقل صريحة فقط. تظل صلاحيات المستندات والمشاركة خاضعة لأودو.</p>
+                <group><field name="folder_id" string="مجلد المستندات"/><field name="storage_id" string="اتصال التخزين"/><field name="include_subfolders" string="تضمين المجلدات الفرعية"/><field name="active" string="مفعّل"/></group></sheet></form></field></record>
+    <record id="action_fd_workspaces" model="ir.actions.act_window"><field name="name">مجلدات المستندات</field><field name="res_model">fastegy.drive.workspace</field><field name="view_mode">list,form</field></record>
+    <menuitem id="menu_fd_workspaces" name="مجلدات المستندات" parent="fastegy_drive_storage.menu_drive_root" action="action_fd_workspaces" sequence="85"/>
+</odoo>

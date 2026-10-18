@@ -1,0 +1,271 @@
+<odoo>
+    <record id="view_drive_storage_management" model="ir.ui.view">
+        <field name="name">fastegy.drive.storage.management</field>
+        <field name="model">fs.storage</field>
+        <field name="inherit_id" ref="view_drive_storage_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_fd_health" type="object" string="تحديث الحالة" />
+                <button name="action_fd_files" type="object" string="الملفات المدارة" />
+                <button name="action_fd_reconcile" type="object" string="مراجعة دفعة ملفات" confirm="ستتم مراجعة بيانات الدفعة التالية ومقارنتها بسجل الملفات دون حذف ملفات من درايف." />
+                <button name="action_fd_manifest" type="object" string="تصدير بيانات الاستعادة" />
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="حالة التخزين">
+                    <group>
+                        <group>
+                            <field name="fd_health" string="حالة الاتصال" />
+                            <field name="fd_checked_at" string="آخر فحص" />
+                            <field name="fd_error_category" string="نوع المشكلة" />
+                            <field name="fd_quota_known" string="بيانات المساحة متاحة" />
+                            <field name="fd_quota_used_mb" string="المساحة المستخدمة للحساب بالميجابايت" />
+                            <field name="fd_quota_limit_mb" string="إجمالي مساحة الحساب بالميجابايت" />
+                        </group>
+                        <group>
+                            <field name="fd_blob_count" string="عدد الملفات المدارة" />
+                            <field name="fd_managed_mb"/>
+                            <field name="fd_blob_bytes" string="حجم الملفات المدارة بالبايت" invisible="1" />
+                            <field name="fd_failed_jobs" string="مهام تحتاج إعادة محاولة" />
+                            <field name="fd_orphan_count" string="ملفات غير مرتبطة" />
+                            <field name="fd_reconcile_in_progress" string="مراجعة الملفات جارية" />
+                            <field name="fd_reconciled_at" string="آخر مراجعة للملفات" />
+                            <field name="fd_jobs_enabled" string="تشغيل مهام النقل" />
+                            <field name="fd_monitor_enabled" string="تشغيل مراقبة الاتصال" />
+                            <field name="fd_notify_user_id" string="مسؤول التنبيهات" />
+                        </group>
+                    </group>
+                    <p>المساحة المستخدمة تخص حساب جوجل بالكامل. حجم الملفات المدارة يخص الملفات المسجلة في الإضافة فقط.</p>
+                </page>
+                <page string="تنظيم الملفات والاستعادة">
+                    <group>
+                        <field name="fd_folder_layout" string="ترتيب مجلدات الملفات" />
+                        <field name="fd_retention_days" string="مدة الاحتفاظ قبل السماح بالنقل إلى المهملات بالأيام" />
+                    </group>
+                    <p>يحدد ترتيب المجلدات مكان الملفات الجديدة. تغيير الترتيب لا ينقل الملفات القديمة فورًا. الإضافة لا تحذف الملفات غير المرتبطة نهائيًا.</p>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">مساحة شركة مشتركة — اختياري</summary>
+                        <group>
+                            <field name="fd_shared_drive_id" string="معرّف مساحة الشركة المشتركة" />
+                            <field name="fd_shared_verified" string="تم التحقق من المساحة المشتركة" />
+                        </group>
+                        <p>تُستخدم فقط عند التخزين في مساحة مشتركة تابعة للشركة. اتركها فارغة عند استخدام مجلد في حسابك الشخصي.</p>
+                    </details>
+                </page>
+                <page name="fd_advanced_settings" string="الحماية والإعداد المتقدم" groups="base.group_system">
+                    <group>
+                        <field name="fd_oauth_lifecycle" string="وضع تصريح جوجل" />
+                        <field name="fd_encryption_state" string="حالة تشفير بيانات الربط" />
+                    </group>
+                    <button name="action_fd_encrypt_credentials" type="object" string="تشفير بيانات الربط أو تحديث مفاتيحها" />
+                    <p>قد ينتهي تصريح الاتصال بعد سبعة أيام أثناء اختبار تطبيق جوجل الخارجي. راجع حالة التشفير قبل التشغيل الفعلي، واحتفظ بنسخة آمنة من مفاتيح الاستعادة.</p>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">اختيار ملفات موجودة على درايف — إعداد اختياري</summary>
+                        <group>
+                            <field name="fd_picker_api_key" string="مفتاح واجهة اختيار الملفات" />
+                            <field name="fd_picker_app_id" string="رقم مشروع جوجل للاختيار" />
+                        </group>
+                        <p>مطلوب لفتح نافذة اختيار ملف موجود على درايف فقط. الرفع التلقائي من أودو لا يحتاج هذه الإعدادات. قيّد مفتاح الاختيار بعنوان النظام وواجهة اختيار الملفات.</p>
+                    </details>
+                    <details class="mt-3 mb-3">
+                        <summary class="fw-bold mb-3">دليل الإعداد التقني وحفظ مفاتيح التشفير</summary>
+                        <ol>
+                            <li>أنشئ مشروعًا في جوجل كلاود وفعّل واجهة درايف.</li>
+                            <li>اضبط شاشة الموافقة وأنشئ عميل مصادقة لتطبيق ويب.</li>
+                            <li>أضف رابط العودة المعروض في إعدادات الاتصال كما هو.</li>
+                            <li>احفظ معرّف التطبيق وسرّه ثم اربط حساب جوجل بصلاحية الملفات المحدودة.</li>
+                            <li>خصص مجلدًا للتخزين. استخدم معرّف المساحة المشتركة فقط عند التخزين في مساحة الشركة.</li>
+                            <li>اختبر الوصول إلى المجلد قبل السماح بالرفع.</li>
+                            <li>وفّر مفاتيح التشفير الخارجية واحفظ نسخة استعادة آمنة. راجع استمرار المفاتيح بعد إعادة بناء الاستضافة.</li>
+                            <li>شفّر بيانات الربط القديمة وافحص التغطية ثم جرّب صورة ومستندًا.</li>
+                        </ol>
+                    </details>
+                </page>
+            </xpath>
+            <xpath expr="//page[@name='fd_advanced_settings']" position="inside">
+                <xpath expr="//page[@name='fd_manual_routes']/details" position="move"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_drive_dashboard" model="ir.ui.view"><field name="name">fastegy.drive.dashboard</field><field name="model">fs.storage</field>
+        <field name="arch" type="xml"><kanban create="false"><templates><t t-name="card">
+            <strong><field name="name" string="الاسم"/></strong><div><field name="fd_health"/></div>
+            <div>الملفات المرتبطة: <field name="fd_blob_count"/></div><div>حجم الملفات المدارة بالبايت: <field name="fd_blob_bytes"/></div>
+            <div>مهام متعثرة أو قيد المحاولة: <field name="fd_failed_jobs"/></div><div>ملفات غير مرتبطة: <field name="fd_orphan_count"/></div>
+            <div>آخر فحص للاتصال: <field name="fd_checked_at"/></div>
+        </t></templates></kanban></field></record>
+    <record id="action_drive_dashboard" model="ir.actions.act_window"><field name="name">حالة التخزين</field><field name="res_model">fs.storage</field>
+        <field name="view_mode">kanban,list,form</field><field name="view_id" ref="view_drive_dashboard"/>
+        <field name="domain">[('protocol','=','fastegy_gdrive')]</field></record>
+    <record id="dashboard_form_binding" model="ir.actions.act_window.view"><field name="sequence">2</field><field name="view_mode">form</field><field name="view_id" ref="view_drive_storage_form"/><field name="act_window_id" ref="action_drive_dashboard"/></record>
+    <record id="dashboard_kanban_binding" model="ir.actions.act_window.view"><field name="sequence">1</field><field name="view_mode">kanban</field><field name="view_id" ref="view_drive_dashboard"/><field name="act_window_id" ref="action_drive_dashboard"/></record>
+    <record id="view_fd_blob_list" model="ir.ui.view"><field name="name">fastegy.drive.blob.list</field><field name="model">fastegy.drive.blob</field>
+        <field name="arch" type="xml"><list create="false" delete="false" decoration-danger="state == 'missing'" decoration-muted="state == 'trashed'">
+            <field name="name" string="الاسم"/><field name="storage_id" string="اتصال التخزين"/><field name="res_model" string="الموديل" optional="hide"/><field name="res_id" string="رقم السجل" optional="hide"/><field name="res_field" string="الحقل" optional="hide"/>
+            <field name="mimetype" string="نوع الملف"/><field name="size" string="الحجم بالبايت" sum="بايت"/><field name="state" string="الحالة"/><field name="checked_at" string="آخر تحقق"/>
+            <button name="action_download" type="object" string="تنزيل" invisible="state in ('missing','trashed')"/>
+        </list></field></record>
+    <record id="view_fd_blob_form" model="ir.ui.view">
+    <field name="name">fastegy.drive.blob.form</field>
+    <field name="model">fastegy.drive.blob</field>
+    <field name="arch" type="xml">
+        <form create="false" edit="false" delete="false">
+            <header>
+                <button name="action_reconcile" type="object" string="التحقق من ارتباط الملف" />
+                <button name="action_download" type="object" string="تنزيل" invisible="state in ('missing','trashed')" />
+                <button name="action_open_record" type="object" string="فتح السجل الأصلي" />
+                <button name="action_trash" type="object" string="نقل إلى مهملات درايف" invisible="state != 'orphan'" confirm="يمكن نقل ملف غير مرتبط فقط بعد انتهاء مدة الاحتفاظ. هل تريد المتابعة؟" />
+                <button name="action_restore" type="object" string="استعادة من المهملات" invisible="state != 'trashed'" />
+                <button name="action_restore_version" type="object" string="استعادة هذه النسخة" invisible="state != 'orphan'" confirm="هل تريد استبدال محتوى المرفق بهذه النسخة السابقة؟ ستبقى النسخة الحالية محفوظة للاستعادة." />
+            </header>
+            <sheet>
+                <group readonly="1">
+                    <field name="name" string="الاسم" />
+                    <field name="storage_id" string="اتصال التخزين" />
+                    <field name="state" string="الحالة" />
+                    <field name="attachment_id" string="المرفق" />
+                    <field name="mimetype" string="نوع الملف" />
+                    <field name="size" string="الحجم بالبايت" />
+                    <field name="checked_at" string="آخر تحقق" />
+                    <field name="orphan_since" string="غير مرتبط منذ" />
+                </group>
+                <details class="mt-3 mb-3">
+                    <summary class="fw-bold mb-3">بيانات الملف التقنية</summary>
+                    <group>
+                        <field name="path" string="مسار التخزين" />
+                        <field name="file_id" string="معرّف الملف في درايف" />
+                        <field name="checksum" string="بصمة المحتوى" />
+                        <field name="md5" string="بصمة الملف في درايف" />
+                        <field name="res_model" string="الموديل" />
+                        <field name="res_id" string="رقم السجل" />
+                        <field name="res_field" string="الحقل" />
+                    </group>
+                </details>
+            </sheet>
+        </form>
+    </field>
+</record>
+    <record id="action_fd_blobs" model="ir.actions.act_window"><field name="name">الملفات والاستعادة</field><field name="res_model">fastegy.drive.blob</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_job_list" model="ir.ui.view"><field name="name">fastegy.drive.job.list</field><field name="model">fastegy.drive.job</field><field name="arch" type="xml">
+        <list create="false" delete="false" decoration-danger="state == 'failed'"><field name="storage_id" string="اتصال التخزين"/><field name="attachment_id" string="المرفق"/><field name="kind" string="نوع المهمة"/>
+            <field name="state" string="الحالة"/><field name="attempts" string="عدد المحاولات"/><field name="next_attempt" string="المحاولة التالية"/><field name="error_category" string="نوع المشكلة"/>
+            <button name="action_run" type="object" string="تشغيل" invisible="state not in ('pending','retry')"/>
+            <button name="action_retry" type="object" string="إعادة المحاولة" invisible="state not in ('failed','retry')"/></list></field></record>
+    <record id="view_fd_job_form" model="ir.ui.view">
+    <field name="name">fastegy.drive.job.form</field>
+    <field name="model">fastegy.drive.job</field>
+    <field name="arch" type="xml">
+        <form create="false" delete="false">
+            <header>
+                <button name="action_run" type="object" string="تشغيل" />
+                <button name="action_retry" type="object" string="إعادة المحاولة" />
+                <button name="action_cancel" type="object" string="إلغاء" />
+            </header>
+            <sheet>
+                <group>
+                    <field name="storage_id" string="اتصال التخزين" readonly="1" />
+                    <field name="attachment_id" string="المرفق" readonly="1" />
+                    <field name="kind" string="نوع المهمة" readonly="1" />
+                    <field name="state" string="الحالة" readonly="1" />
+                    <field name="attempts" string="عدد المحاولات" />
+                    <field name="next_attempt" string="المحاولة التالية" />
+                    <field name="error_category" string="نوع المشكلة" />
+                    <field name="completed_at" string="وقت الاكتمال" />
+                </group>
+                <details class="mt-3 mb-3">
+                    <summary class="fw-bold mb-3">تفاصيل المهمة — متقدم</summary>
+                    <group>
+                        <field name="expected_checksum" string="البصمة المتوقعة" readonly="1" />
+                        <field name="migration_id" string="عملية النقل" readonly="1" />
+                        <field name="max_attempts" string="أقصى عدد للمحاولات" />
+                    </group>
+                </details>
+            </sheet>
+        </form>
+    </field>
+</record>
+    <record id="action_fd_jobs" model="ir.actions.act_window"><field name="name">طابور النقل</field><field name="res_model">fastegy.drive.job</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_event_list" model="ir.ui.view"><field name="name">fastegy.drive.event.list</field><field name="model">fastegy.drive.event</field><field name="arch" type="xml">
+        <list create="false" edit="false" delete="false"><field name="create_date" string="تاريخ الإنشاء"/><field name="storage_id" string="اتصال التخزين"/><field name="operation" string="العملية"/><field name="outcome" string="النتيجة"/>
+            <field name="category" string="التصنيف" optional="hide"/><field name="attachment_id" string="المرفق"/><field name="byte_count" string="حجم البيانات بالبايت" sum="بايت"/><field name="actor_id" string="منفّذ العملية"/></list></field></record>
+    <record id="action_fd_events" model="ir.actions.act_window"><field name="name">سجل العمليات</field><field name="res_model">fastegy.drive.event</field><field name="view_mode">list</field></record>
+    <record id="view_fd_rule_list" model="ir.ui.view"><field name="name">fastegy.drive.rule.list</field><field name="model">fastegy.drive.rule</field><field name="arch" type="xml">
+        <list><field name="sequence" string="الأولوية" widget="handle"/><field name="name" string="الاسم"/><field name="model_id" string="الموديل"/><field name="field_id" string="حقل الملف"/><field name="company_id" string="الشركة"/>
+            <field name="mode" string="طريقة التنفيذ"/><field name="storage_id" string="اتصال التخزين"/><field name="mime_patterns" string="أنواع الملفات المطابقة"/><field name="active" string="مفعّل"/></list></field></record>
+    <record id="view_fd_rule_form" model="ir.ui.view">
+    <field name="name">fastegy.drive.rule.form</field>
+    <field name="model">fastegy.drive.rule</field>
+    <field name="arch" type="xml">
+        <form>
+            <header>
+                <button name="action_test_rule" type="object" string="معاينة القاعدة" />
+            </header>
+            <sheet>
+                <group>
+                    <field name="name" string="الاسم" />
+                    <field name="active" string="مفعّل" />
+                    <field name="sequence" string="الأولوية" />
+                    <field name="model_id" string="الموديل" />
+                    <field name="mode" string="طريقة التنفيذ" />
+                    <field name="storage_id" string="اتصال التخزين" />
+                </group>
+                <details class="mt-3 mb-3">
+                    <summary class="fw-bold mb-3">شروط إضافية — اختياري</summary>
+                    <group>
+                        <field name="field_id" string="حقل الملف" />
+                        <field name="company_id" string="الشركة" />
+                        <field name="mime_patterns" string="أنواع الملفات المطابقة" />
+                        <field name="minimum_bytes" string="أقل حجم بالبايت" />
+                        <field name="maximum_bytes" string="أقصى حجم بالبايت" />
+                        <field name="record_domain" string="شرط تصفية السجلات" />
+                    </group>
+                </details>
+                <details class="mt-3 mb-3">
+                    <summary class="fw-bold mb-3">اختبار القاعدة قبل تشغيلها</summary>
+                    <group>
+                        <field name="test_record_id" string="رقم سجل المعاينة" />
+                        <field name="test_mimetype" string="نوع ملف المعاينة" />
+                        <field name="test_size" string="حجم ملف المعاينة بالبايت" />
+                        <field name="test_result" string="نتيجة المعاينة" />
+                    </group>
+                </details>
+            </sheet>
+        </form>
+    </field>
+</record>
+    <record id="action_fd_rules" model="ir.actions.act_window"><field name="name">قواعد التوجيه المتقدمة</field><field name="res_model">fastegy.drive.rule</field><field name="view_mode">list,form</field><field name="help" type="html"><p>لا توجد استثناءات توجيه يدوية. التوجيه التلقائي يُراجع من اختيار التطبيقات ثم التغطية والاستثناءات. إنشاء قاعدة هنا اختياري وليس شرطًا لتشغيل التخزين.</p></field></record>
+    <record id="view_fd_coverage_list" model="ir.ui.view"><field name="name">fastegy.drive.coverage.list</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
+        <list><field name="name" string="الاسم"/><field name="scanned_at" string="آخر فحص"/><field name="attachment_fields" string="حقول المرفقات"/><field name="direct_fields" string="حقول محفوظة بقاعدة البيانات"/><field name="computed_fields" string="حقول محسوبة"/></list></field></record>
+    <record id="view_fd_coverage_form" model="ir.ui.view"><field name="name">fastegy.drive.coverage.form</field><field name="model">fastegy.drive.coverage</field><field name="arch" type="xml">
+        <form><header><button name="action_scan" type="object" string="فحص تعريفات الحقول" class="btn-primary"/>
+            <button name="action_export" type="object" string="تصدير تقرير الفحص"/></header><sheet><group><field name="name" string="الاسم"/><field name="model_ids" string="الموديلات" widget="many2many_tags"/>
+            <field name="scanned_at" string="آخر فحص"/><field name="attachment_fields" string="حقول المرفقات"/><field name="direct_fields" string="حقول محفوظة بقاعدة البيانات"/><field name="computed_fields" string="حقول محسوبة"/></group><field name="explanation" string="تفسير التغطية"/>
+            <field name="line_ids" string="تفاصيل الفحص"><list create="false" delete="false" decoration-danger="status == 'column'">
+                <field name="model_name" string="اسم الموديل التقني" optional="hide"/><field name="field_name" string="اسم الحقل التقني" optional="hide"/><field name="label" string="الوصف"/><field name="status" string="الحالة"/><field name="storage_code" string="رمز المخزن" optional="hide"/></list></field></sheet></form></field></record>
+    <record id="action_fd_coverage" model="ir.actions.act_window"><field name="name">فحص تغطية الملفات</field><field name="res_model">fastegy.drive.coverage</field><field name="view_mode">list,form</field></record>
+    <record id="view_fd_import_form" model="ir.ui.view"><field name="name">fastegy.drive.import.form</field><field name="model">fastegy.drive.import</field><field name="arch" type="xml">
+        <form><sheet><p>اختر ملفًا مصرحًا لهذا التطبيق بالوصول إليه، ثم اختر مرجعًا خاصًا للملف أو نسخة مستقلة. يتوقف المرجع إذا تغير الأصل أو حُذف أو أُلغي التصريح. لا تُحفظ نسخة محلية دائمة.</p>
+            <group><field name="storage_id" string="اتصال التخزين"/><field name="model_id" string="الموديل"/><field name="record_id" string="رقم السجل"/><field name="drive_file_id" string="معرّف الملف المصرّح به"/><field name="mode" string="طريقة التنفيذ"/><field name="name" string="الاسم"/><field name="attachment_id" string="المرفق"/></group>
+            <button name="action_picker" type="object" string="اختيار ملف من درايف"/>
+            <button name="action_import" type="object" string="إرفاق الملف المحدد" class="btn-primary"/></sheet></form></field></record>
+    <record id="action_drive_import" model="ir.actions.act_window"><field name="name">إرفاق ملف موجود على درايف</field><field name="res_model">fastegy.drive.import</field><field name="view_mode">form</field></record>
+    <record id="view_fd_share_list" model="ir.ui.view"><field name="name">fastegy.drive.share.list</field><field name="model">fastegy.drive.share</field><field name="arch" type="xml">
+        <list><field name="name" string="الاسم"/><field name="partner_id" string="جهة الاتصال المصرّح لها"/><field name="expires_at" string="انتهاء الصلاحية"/><field name="active" string="مفعّل"/></list></field></record>
+    <record id="view_fd_share_form" model="ir.ui.view"><field name="name">fastegy.drive.share.form</field><field name="model">fastegy.drive.share</field><field name="arch" type="xml">
+        <form><header><button name="action_revoke" type="object" string="إلغاء تصريح الوصول"/></header><sheet><p>يمنح جهة الاتصال المحددة، بعد تسجيل الدخول، صلاحية قراءة هذا الملف حتى انتهاء المدة. لا يتيح السجل الأصلي ولا يرسل رسالة.</p>
+            <group><field name="attachment_id" string="المرفق"/><field name="partner_id" string="جهة الاتصال المصرّح لها"/><field name="expires_at" string="انتهاء الصلاحية"/><field name="active" string="مفعّل"/><field name="url" string="رابط الوصول" widget="url"/></group></sheet></form></field></record>
+    <record id="action_fd_shares" model="ir.actions.act_window"><field name="name">تصاريح الوصول الخاصة</field><field name="res_model">fastegy.drive.share</field><field name="view_mode">list,form</field><field name="help" type="html"><p>لا توجد تصاريح وصول خاصة. مستخدمو أودو يستمرون بصلاحيات السجلات المعتادة. أنشئ تصريحًا فقط عند الحاجة لمنح جهة اتصال وصولًا مؤقتًا إلى ملف محدد.</p></field></record>
+    <record id="view_fd_migration_queue" model="ir.ui.view"><field name="name">fastegy.drive.migration.queue</field><field name="model">fastegy.drive.migration</field>
+        <field name="inherit_id" ref="view_drive_migration_form"/><field name="arch" type="xml">
+            <xpath expr="//header" position="inside"><button name="action_enqueue_batch" type="object" string="إضافة الدفعة التالية للطابور بحد أقصى ٥٠٠ ملف" invisible="state not in ('ready','running')"/></xpath>
+            <xpath expr="//sheet" position="inside"><group string="مهام النقل المستقلة"><field name="queued_count" string="المهام المضافة للطابور"/><p>إضافة المهمة للطابور لا تعني اكتمال النقل. راجع المهام في طابور النقل؛ تعثر مهمة لا يوقف باقي المهام.</p></group></xpath>
+        </field></record>
+    <menuitem id="menu_fd_advanced" name="أدوات اختيارية ومتقدمة" parent="menu_drive_root" sequence="90"/>
+    <menuitem id="menu_fd_dashboard" name="لوحة حالة التخزين" parent="menu_drive_root" action="action_drive_dashboard" sequence="1"/>
+    <menuitem id="menu_fd_blobs" name="الملفات والاستعادة" parent="menu_drive_root" action="action_fd_blobs" sequence="20"/>
+    <menuitem id="menu_fd_jobs" name="طابور النقل" parent="menu_drive_root" action="action_fd_jobs" sequence="30"/>
+    <menuitem id="menu_fd_events" name="سجل العمليات" parent="menu_fd_advanced" action="action_fd_events" sequence="40"/>
+    <menuitem id="menu_fd_rules" name="قواعد التوجيه المتقدمة" parent="menu_fd_advanced" action="action_fd_rules" sequence="50"/>
+    <menuitem id="menu_fd_coverage" name="فحص التغطية" parent="menu_fd_advanced" action="action_fd_coverage" sequence="60"/>
+    <menuitem id="menu_fd_import" name="إرفاق ملف موجود على درايف" parent="menu_fd_advanced" action="action_drive_import" sequence="70"/>
+    <menuitem id="menu_fd_shares" name="تصاريح الوصول الخاصة" parent="menu_fd_advanced" action="action_fd_shares" sequence="80"/>
+</odoo>

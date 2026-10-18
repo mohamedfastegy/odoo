@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-18",
+  "version": "18.0.0.2.2",
+  "runtime_commit": "5841be63ca041f2bb11e341492d2fd3b04e7d263",
+  "deployment": "staging only",
+  "offline_tests": {
+    "passed": 63
+  },
+  "odoo_scope_tests": {
+    "passed": 24,
+    "failed": 0,
+    "errors": 0
+  },
+  "odoo_partial_progress_test": {
+    "passed": 1,
+    "failed": 0,
+    "errors": 0
+  },
+  "real_drive_roundtrip": {
+    "files": 2,
+    "legs_per_file": [
+      "local_to_drive",
+      "drive_to_local",
+      "local_to_drive"
+    ],
+    "content_verified_each_leg": true,
+    "database_binary_empty_after_transfer": true
+  },
+  "native_scheduler": {
+    "first_queue_size": 100,
+    "first_sample_completed": 5,
+    "first_sample_failed": 0,
+    "original_enabled_state_restored": true,
+    "later_background_progress_observed": true
+  },
+  "recovery_manifest": "private copy retained on staging; no credentials exported",
+  "release_status": "not approved for production",
+  "remaining_gates": [
+    "Confirm permanent OAuth publishing status; stored configuration still says testing.",
+    "Encrypt legacy credentials and keep an independent backup of recovery keys.",
+    "Full hosting/database rebuild recovery drill remains unperformed.",
+    "Complete bulk migration separately; test success does not mean all old files moved.",
+    "Physical filestore reclamation remains unmeasured; normal Odoo cleanup applies."
+  ],
+  "odoo_http_access_tests": {
+    "passed": 4,
+    "failed": 0,
+    "errors": 0,
+    "transport": "real local HTTP with synthetic recipients; external byte stream stubbed; real Drive transfer verified separately"
+  },
+  "odoo_total_passed": 29,
+  "http_test_bootstrap_note": "Initial run with module upgrade conflicted with another registry load before test execution. Re-run without module upgrade completed all four tests successfully.",
+  "browser_checks": {
+    "native_image_route": "verified",
+    "quota_mb_rounding": "verified",
+    "empty_rule_help": "verified",
+    "scope_transfer_status": "verified",
+    "direct_text_download_navigation": "browser reported ERR_BLOCKED_BY_CLIENT; not treated as successful browser download"
+  }
+}

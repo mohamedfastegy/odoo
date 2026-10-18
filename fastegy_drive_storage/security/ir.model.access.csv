@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_fd_migration_admin,Drive migration administrators,model_fastegy_drive_migration,base.group_system,1,1,1,1
+access_fd_event_admin,Drive operation audit,model_fastegy_drive_event,base.group_system,1,0,0,0
+access_fd_blob_admin,Drive recovery manifest,model_fastegy_drive_blob,base.group_system,1,1,1,0
+access_fd_job_admin,Drive transfer queue,model_fastegy_drive_job,base.group_system,1,1,1,0
+access_fd_rule_admin,Drive routing rules,model_fastegy_drive_rule,base.group_system,1,1,1,1
+access_fd_coverage_admin,Drive coverage audits,model_fastegy_drive_coverage,base.group_system,1,1,1,1
+access_fd_coverage_line_admin,Drive coverage fields,model_fastegy_drive_coverage_line,base.group_system,1,1,1,1
+access_fd_import_admin,Drive existing file import,model_fastegy_drive_import,base.group_system,1,1,1,1
+access_fd_share_admin,Drive private sharing,model_fastegy_drive_share,base.group_system,1,1,1,1
+access_fd_scope_line_admin,Application discovery report,model_fastegy_drive_scope_line,base.group_system,1,0,0,0
+
