@@ -275,6 +275,18 @@ class TestApplicationScope(TransactionCase):
         self.storage._compute_fd_transfer_status()
         self.assertIn('غير مفعّل', self.storage.fd_transfer_status)
 
+    def test_partial_backfill_progress_does_not_claim_all_candidates_are_done(self):
+        attachment = self._attachment(local=True)
+        migration = self._scoped_backfill()
+        migration._fd_scope_enqueue_batch()
+        # نحاكي وجود دفعات أخرى لم تدخل الطابور بعد؛ نجاح العينة لا يكمل المعاينة.
+        migration.state = "running"
+        job = self.env["fastegy.drive.job"].search([("migration_id", "=", migration.id)])
+        job.action_run()
+        self.assertEqual(migration.moved_count, 1)
+        self.assertEqual(migration.moved_bytes, attachment.file_size)
+        self.assertEqual(migration.state, "running")
+
     def test_native_scheduler_dispatches_only_installed_operation(self):
         cron = self.env.ref('fastegy_drive_storage.cron_drive_scope')
         action = cron.ir_actions_server_id

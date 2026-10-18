@@ -60,14 +60,17 @@ class DriveMigration(models.Model):
     def _fd_update_queue_progress(self):
         for migration in self:
             jobs = self.env["fastegy.drive.job"].sudo().search([("migration_id", "=", migration.id)])
-            if not jobs or migration.state not in ("queued", "error", "done"):
+            if not jobs or migration.state not in ("ready", "running", "queued", "error", "done"):
                 continue
             done = jobs.filtered(lambda j: j.state == "done")
             pending = jobs.filtered(lambda j: j.state in ("pending", "retry"))
             failed = jobs.filtered(lambda j: j.state == "failed")
-            migration.write({"moved_count": len(done), "moved_bytes": sum(done.mapped("byte_count")),
-                "skipped_count": len(jobs.filtered(lambda j: j.state == "cancelled")),
-                "state": "queued" if pending else ("error" if failed else "done")})
+            values = {"moved_count": len(done), "moved_bytes": sum(done.mapped("byte_count")),
+                "skipped_count": len(jobs.filtered(lambda j: j.state == "cancelled"))}
+            # نعرض النجاح أثناء إضافة الدفعات؛ لا نعلن الاكتمال قبل انتهاء إعداد الطابور.
+            if migration.state in ("queued", "error", "done"):
+                values["state"] = "queued" if pending else ("error" if failed else "done")
+            migration.write(values)
 
     def _admin(self):
         if not self.env.user.has_group("base.group_system"):
