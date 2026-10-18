@@ -30,6 +30,8 @@ class BusinessAttachmentFolders(models.Model):
                 app_key, app_label = module.name, module.with_context(lang="ar_001").shortdesc
             else:
                 app_key, app_label = "model:" + model, anchor._description if anchor else model
+        if app_key == "fastegy_installation":
+            app_label = "التركيبات"
         reference = False
         if anchor and anchor._rec_name and anchor._rec_name in anchor._fields:
             field = anchor._fields[anchor._rec_name]
