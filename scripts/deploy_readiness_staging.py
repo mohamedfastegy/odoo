@@ -54,7 +54,8 @@ def main():
         print('Source backup:', backup, flush=True)
         print('Installing reviewed commit:', REV, flush=True)
         subprocess.run(['odoo-update', ADDON], check=True)
-        subprocess.run(['odoosh-restart'], check=True)
+        subprocess.run(['odoosh-restart', 'http'], check=True)
+        subprocess.run(['odoosh-restart', 'cron'], check=True)
         print('DEPLOYED. Native scheduler, migration, recovery and UI acceptance tests still required.')
 
 if __name__ == '__main__':
