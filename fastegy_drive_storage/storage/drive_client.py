@@ -451,13 +451,13 @@ class DriveClient:
         return self._json("GET", "https://www.googleapis.com/drive/v3/about", retry_safe=True,
                           params={"fields": "storageQuota,user(displayName,emailAddress)"})
 
-    def ensure_folder(self, name, parent_id=None):
+    def ensure_folder(self, name, parent_id=None, identity=None):
         if self.readonly:
             raise PermissionError("Google Drive storage is read-only")
         parent_id = parent_id or self.root_folder_id
         if parent_id != self.root_folder_id and not self._inside_root([parent_id]):
             raise PermissionError("Folder parent is outside managed root")
-        key = hashlib.sha256((parent_id + "/" + name).encode()).hexdigest()
+        key = hashlib.sha256((parent_id + "/" + (identity or name)).encode()).hexdigest()
         q = "'%s' in parents and trashed=false and mimeType='application/vnd.google-apps.folder' and appProperties has { key='fastegy_folder' and value='%s' }" % (parent_id, key)
         params = {"q": q, "fields": "files(id,name,parents)", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"}
         if self.shared_drive_id:
@@ -466,6 +466,9 @@ class DriveClient:
         if len(found) > 1:
             raise DuplicateRemotePathError("Duplicate managed folder identity")
         if found:
+            if identity and found[0].get("name") != name[:180]:
+                self._json("PATCH", API_URL + "/" + found[0]["id"], retry_safe=True,
+                    params={"fields": "id", "supportsAllDrives": "true"}, json={"name": name[:180]})
             return found[0]["id"]
         return self._json("POST", API_URL, json={"name": name[:180], "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id], "appProperties": {"fastegy_folder": key}},
@@ -477,7 +480,8 @@ class DriveClient:
             raise PermissionError("Google Drive storage is read-only")
         parent = self.root_folder_id
         for folder in folders:
-            parent = self.ensure_folder(folder, parent)
+            parent = (self.ensure_folder(folder["name"], parent, identity=folder["key"])
+                      if isinstance(folder, dict) else self.ensure_folder(folder, parent))
         params = {"fields": FILE_FIELDS, "supportsAllDrives": "true"}
         if metadata.get("parents") != [parent]:
             params.update(addParents=parent, removeParents=",".join(metadata.get("parents", [])))

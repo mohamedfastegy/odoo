@@ -295,3 +295,22 @@ def test_incomplete_remote_inventory_cannot_appear_successful(remote):
         fs.client.list_file_page()
     params = [kwargs["params"] for method, url, kwargs in session.calls if method == "GET" and url == API][-1]
     assert "incompleteSearch" in params["fields"]
+
+
+def test_stable_business_folders_move_once_and_rename_without_duplicates(remote):
+    fs, session = remote
+    old = add(fs)
+    folders = ["company_2", {"key": "business:app:installation", "name": "التركيبات"},
+               {"key": "business:record:12", "name": "FE-12"},
+               {"key": "business:category:images", "name": "صور التركيب"}]
+    first = fs.client.update_presentation(old, "proof.jpg", "image/jpeg", folders)
+    count = len(session.files)
+    folders[2]["name"] = "FE-12 revised"
+    second = fs.client.update_presentation(first, "proof.jpg", "image/jpeg", folders)
+    third = fs.client.update_presentation(second, "proof.jpg", "image/jpeg", folders)
+    assert len(session.files) == count
+    assert old["id"] == first["id"] == second["id"] == third["id"]
+    assert first["parents"] == second["parents"] == third["parents"]
+    assert fs.client.lookup("blob")["id"] == old["id"]
+    assert fs.client.download(third) == b"proof"
+    assert any(f["name"] == "FE-12 revised" for f in session.files.values())

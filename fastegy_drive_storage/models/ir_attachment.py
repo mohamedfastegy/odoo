@@ -106,6 +106,8 @@ class IrAttachment(models.Model):
                     company_id = attachment.company_id.id or self.env.company.id
                     folders = ["company_%s" % company_id, safe_name(attachment.res_model, "unassigned"),
                                "record_%s" % (attachment.res_id or 0), safe_name(attachment.res_field, "attachments")]
+                elif storage.fd_folder_layout == "business":
+                    folders = attachment._fd_business_folders(storage)
                 # بيانات العرض لا تغيّر المفتاح؛ تغيير اسم سجل الأعمال لا يكسر المرفق.
                 metadata = client.update_presentation(metadata, safe_name(attachment.name), attachment.mimetype or "application/octet-stream", folders)
                 details = {"schema": 1, "path": path, "odoo": {"model": attachment.res_model, "id": attachment.res_id,

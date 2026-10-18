@@ -1,6 +1,6 @@
 {
     "name": "FastEgy Google Drive Storage",
-    "version": "18.0.0.2.2",
+    "version": "18.0.0.2.3",
     "summary": "Automatic application discovery, private Drive storage, routing and recovery",
     "author": "FastEgy",
     "license": "AGPL-3",

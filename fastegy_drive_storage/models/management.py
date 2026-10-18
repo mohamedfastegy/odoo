@@ -79,7 +79,8 @@ class DriveManagement(models.Model):
     _inherit = ["fs.storage", "mail.thread", "mail.activity.mixin"]
 
     fd_shared_drive_id = fields.Char(string="Shared drive ID", copy=False)
-    fd_folder_layout = fields.Selection([("flat", "المجلد الرئيسي فقط"), ("record", "الشركة ثم الموديل ثم السجل ثم الحقل")],
+    fd_folder_layout = fields.Selection([("flat", "المجلد الرئيسي فقط"), ("record", "الشركة ثم الموديل ثم السجل ثم الحقل"),
+        ("business", "الشركة ثم التطبيق ثم رقم الطلب ثم نوع المرفقات")],
                                        default="flat", required=True)
     fd_retention_days = fields.Integer(default=30, required=True)
     fd_jobs_enabled = fields.Boolean(default=False)
