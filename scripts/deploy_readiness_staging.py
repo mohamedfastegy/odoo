@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 BASE = '0b645078370604911d7cdcf02c02a277cbf2cb33'
-REV = '5b5a49930cb31310a335f83fba27deaf216c51e8'
+REV = '5841be63ca041f2bb11e341492d2fd3b04e7d263'
 ADDON = 'fastegy_drive_storage'
 TARGET = pathlib.Path.home() / 'src/user/private_addons/fastegy_projectx' / ADDON
 
